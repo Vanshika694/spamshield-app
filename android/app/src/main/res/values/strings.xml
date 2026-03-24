@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SpamShield</string>
+    <!-- Google Sign-In Web Client ID from Google Cloud Console -->
+    <string name="default_web_client_id">991102462359-dguj0hp4cbmuuc5m16kidn6t09ns9a1k.apps.googleusercontent.com</string>
+</resources>

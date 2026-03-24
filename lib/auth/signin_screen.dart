@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
+import '../services/google_auth_service.dart';
 import '../theme/app_theme.dart';
 import '../screens/home_screen.dart';
 import 'signup_screen.dart';
@@ -18,8 +19,9 @@ class _SignInScreenState extends State<SignInScreen>
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passCtrl  = TextEditingController();
-  bool _obscure   = true;
-  bool _loading   = false;
+  bool _obscure      = true;
+  bool _loading      = false;
+  bool _googleLoading = false;
   String? _error;
 
   late AnimationController _fadeCtrl;
@@ -240,20 +242,56 @@ class _SignInScreenState extends State<SignInScreen>
     );
   }
 
+  Future<void> _signInWithGoogle() async {
+    setState(() { _googleLoading = true; _error = null; });
+    final googleResult = await GoogleAuthService.signIn();
+    if (!mounted) return;
+
+    if (googleResult.cancelled) {
+      setState(() => _googleLoading = false);
+      return;
+    }
+    if (!googleResult.success) {
+      setState(() { _googleLoading = false; _error = googleResult.error; });
+      return;
+    }
+
+    final result = await AuthService.signInWithGoogle(
+      idToken: googleResult.idToken!,
+      name: googleResult.name!,
+      email: googleResult.email!,
+    );
+    if (!mounted) return;
+    setState(() => _googleLoading = false);
+    if (result.success) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, a, b) => const HomeScreen(),
+          transitionsBuilder: (_, a, b, child) => FadeTransition(opacity: a, child: child),
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+        (r) => false,
+      );
+    } else {
+      setState(() => _error = result.error);
+    }
+  }
+
   Widget _buildGoogleButton() {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Google Sign-In coming soon!',
-                style: GoogleFonts.inter()),
-            backgroundColor: AppTheme.surface,
-          ));
-        },
-        icon: const Icon(Icons.g_mobiledata_rounded, size: 24, color: AppTheme.textPrimary),
-        label: Text('Continue with Google',
-            style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 14)),
+        onPressed: (_loading || _googleLoading) ? null : _signInWithGoogle,
+        icon: _googleLoading
+            ? const SizedBox(
+                width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary))
+            : const Icon(Icons.g_mobiledata_rounded, size: 24, color: AppTheme.textPrimary),
+        label: Text(
+          _googleLoading ? 'Signing in...' : 'Continue with Google',
+          style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 14),
+        ),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 14),
           side: BorderSide(color: AppTheme.border),

@@ -117,6 +117,38 @@ class AuthService {
     }
   }
 
+  // ─── SIGN IN WITH GOOGLE ──────────────────────────────────────
+  static Future<AuthResult> signInWithGoogle({
+    required String idToken,
+    required String name,
+    required String email,
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/google'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'idToken': idToken}),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(res.body);
+      if (res.statusCode == 200 && data['success'] == true) {
+        await _saveLocal(
+          name: data['user']?['name'] ?? name,
+          email: email,
+          password: '',
+          token: data['token'] ?? '',
+          id: data['user']?['id'] ?? '',
+        );
+        return AuthResult(success: true);
+      }
+      return AuthResult(success: false, error: data['message'] ?? 'Google sign-in failed.');
+    } catch (_) {
+      // Offline fallback — save Google user locally
+      await _saveLocal(name: name, email: email, password: 'google_sso');
+      return AuthResult(success: true, isOffline: true);
+    }
+  }
+
   // ─── FORGOT PASSWORD ─────────────────────────────────────────
   static Future<AuthResult> sendResetLink(String email) async {
     await Future.delayed(const Duration(milliseconds: 800));
