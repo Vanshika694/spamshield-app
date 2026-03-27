@@ -93,8 +93,9 @@ class _SignUpScreenState extends State<SignUpScreen>
     if (!RegExp(r'[A-Z]').hasMatch(v)) return 'Include at least one uppercase letter (A-Z)';
     if (!RegExp(r'[a-z]').hasMatch(v)) return 'Include at least one lowercase letter (a-z)';
     if (!RegExp(r'[0-9]').hasMatch(v)) return 'Include at least one number (0-9)';
-    if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(v))
+    if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(v)) {
       return 'Include at least one special character (!@#\$...)';
+    }
     return null;
   }
 

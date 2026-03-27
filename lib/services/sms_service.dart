@@ -1,5 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
+import 'package:flutter_embedder/flutter_embedder.dart';
+import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
+import 'dart:math';
 
 /// Result of a spam classification
 class SmsClassification {
@@ -34,34 +39,57 @@ class SmsService {
     return status.isGranted;
   }
 
-  static Future<bool> hasPermission() async =>
-      await Permission.sms.isGranted;
+  static Future<bool> hasPermission() async => await Permission.sms.isGranted;
 
   static Future<void> openSettings() async => await openAppSettings();
 
   // ─── READ ALL SMS from device inbox ───────────────────────────
   static Future<List<ProcessedSms>> getAllSms() async {
+    print("!! Initializing Tokenizer & Model Session...\n");
+    final tokenizerPath = "assets/model/tokenizer.json";
+    final modelPath = "assets/model/model.onnx";
+
+    final tokenizer = await HfTokenizer.fromAsset(tokenizerPath);
+    // create inference session
+    final ort = OnnxRuntime();
+    final session = await ort.createSessionFromAsset(modelPath);
+    print("!! Tokenizer & Model Session Initialized\n");
+    print("!! Fetching All Messages !!\n");
     try {
       final messages = await _query.querySms(
         kinds: [SmsQueryKind.inbox],
         count: 500, // limit to 500 most recent
       );
 
-      return messages.map((sms) {
-        final body   = sms.body   ?? '';
-        final sender = sms.sender ?? 'Unknown';
-        final date   = sms.date   ?? DateTime.now();
+      print("Got all Messages\n");
+      final processed = await Future.wait(
+        messages.map((sms) async {
+          final body = sms.body ?? '';
+          final sender = sms.sender ?? 'Unknown';
+          final date = sms.date ?? DateTime.now();
+          print("\tProccessing Messages:\n\t\t$body\n");
 
-        final classification = _classify(body, sender);
-        return ProcessedSms(
-          sender: sender,
-          body: body,
-          date: date,
-          isSpam: classification.isSpam,
-          confidence: classification.confidence,
-        );
-      }).toList();
-    } catch (e) {
+          final classification = await _classify(
+            body,
+            sender,
+            tokenizer,
+            session,
+          );
+
+          return ProcessedSms(
+            sender: sender,
+            body: body,
+            date: date,
+            isSpam: classification.isSpam,
+            confidence: classification.confidence,
+          );
+        }),
+      );
+
+      return processed;
+    } catch (e, stackTrace) {
+      print('❌ Error: $e');
+      print(stackTrace);
       return [];
     }
   }
@@ -70,47 +98,63 @@ class SmsService {
   // TODO: Replace this with your ML model REST API call when ready:
   //   final res = await http.post('https://your-api.com/predict', body: {'text': body});
   //   final score = jsonDecode(res.body)['spam_probability'];
-  static SmsClassification _classify(String body, String sender) {
+  static Future<SmsClassification> _classify(
+    String body,
+    String sender,
+    HfTokenizer tokenizer,
+    OrtSession session,
+  ) async {
     final text = body.toLowerCase();
 
-    double spamScore = 0.0;
+    final tokenizedText = tokenizer.encode(
+      body,
+      addSpecialTokens: true,
+    );
 
-    // Strong spam keywords (+0.25 each)
-    for (final kw in [
-      'won', 'winner', 'prize', 'congratulations', 'claim',
-      'free iphone', 'free gift', 'click here', 'urgent',
-      'limited time', 'act now', 'lottery', 'selected',
-      'cash prize', 'reward', 'bitcoin', 'crypto offer',
-      'loan approved', 'instant loan', 'no documents',
-      'you have been selected', 'you won',
-    ]) {
-      if (text.contains(kw)) spamScore += 0.25;
-    }
+    final tokens = tokenizedText.ids;
+    print("\t\tTokenized Text: $tokens\n");
+    print("\t\tRunning Model ... for above text\n");
 
-    // Medium spam keywords (+0.12 each)
-    for (final kw in [
-      'offer', 'discount', 'deal', 'sale', 'apply now',
-      'call now', 'reply stop', 'unsubscribe', 'earn money',
-      'investment', 'earn from home', 'work from home',
-    ]) {
-      if (text.contains(kw)) spamScore += 0.12;
-    }
+    print('Inputs:  ${session.inputNames}');
+    print('Outputs: ${session.outputNames}');
 
-    // Pattern signals
-    if (RegExp(r'[A-Z]{4,}').hasMatch(body)) spamScore += 0.10; // lots of CAPS
-    if (RegExp(r'!{2,}').hasMatch(body))        spamScore += 0.08; // multiple !!!
-    if (RegExp(r'https?://\S+').hasMatch(text)) spamScore += 0.10; // URL present
-    if (RegExp(r'\d{10}').hasMatch(body))        spamScore += 0.06; // raw phone number
+    final inputIds = Int64List.fromList(tokenizedText.ids);
+    final attentionMask = Int64List.fromList(tokenizedText.attentionMask);
+    final seqLen = tokenizedText.ids.length;
 
-    // Legitimate signals (reduce score)
-    for (final kw in [
-      'otp', 'one time password', 'verification code', 'your code is',
-      'transaction', 'credited', 'debited', 'balance', 'a/c',
-      'appointment', 'delivery', 'order', 'booking confirmed',
-      'your order', 'dispatch', 'invoice',
-    ]) {
-      if (text.contains(kw)) spamScore -= 0.22;
-    }
+    final inputs = {
+      'input_ids': await OrtValue.fromList(inputIds, [1, seqLen]),
+      'attention_mask': await OrtValue.fromList(attentionMask, [1, seqLen]),
+    };
+
+    final outputs = await session.run(inputs);
+
+    final finalScore = await outputs['logits']!.asList();
+    // Softmax ------------------------
+    // logits is [[ham_score, spam_score]] — flatten it
+    final logits = (finalScore[0] as List).cast<double>();
+    print('\t\tLogits: ${logits}');
+    // logits = [3.458, -3.014]
+
+    // Apply softmax
+    final hamLogit = logits[0];
+    final spamLogit = logits[1];
+
+    final maxLogit = hamLogit > spamLogit
+        ? hamLogit
+        : spamLogit; // for numerical stability
+    final expHam = exp(hamLogit - maxLogit);
+    final expSpam = exp(spamLogit - maxLogit);
+    final sumExp = expHam + expSpam;
+
+    final hamProb = expHam / sumExp;
+    final spamScore = expSpam / sumExp;
+
+    // print('HAM:  ${(hamProb * 100).toStringAsFixed(1)}%');
+    print('SPAM: ${(spamScore * 100).toStringAsFixed(1)}%');
+
+    // final double spamScore = spamProb;
+    // --------------------------------
 
     final confidence = spamScore.clamp(0.0, 1.0);
     return SmsClassification(

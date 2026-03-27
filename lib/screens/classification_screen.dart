@@ -184,7 +184,7 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 90),
               itemCount: _filtered.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (_, i) => _SmsCard(
                 sms: _filtered[i],
                 onTap: () => _showDetail(_filtered[i]),

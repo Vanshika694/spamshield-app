@@ -174,7 +174,7 @@ class _DashboardTabState extends State<_DashboardTab>
   Widget _buildSecurityStatusCard() {
     return AnimatedBuilder(
       animation: _pulseCtrl,
-      builder: (_, __) {
+      builder: (_, _) {
         return Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(

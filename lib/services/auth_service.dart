@@ -77,10 +77,12 @@ class AuthService {
 
   // ─── SIGN IN ─────────────────────────────────────────────────
   static Future<AuthResult> signIn(String email, String password) async {
-    if (email.isEmpty || !email.contains('@'))
+    if (email.isEmpty || !email.contains('@')) {
       return AuthResult(success: false, error: 'Enter a valid email address.');
-    if (password.length < 6)
+    }
+    if (password.length < 6) {
       return AuthResult(success: false, error: 'Password must be at least 6 characters.');
+    }
 
     // Try backend
     try {

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'auth/splash_screen.dart';
 import 'theme/app_theme.dart';
+import 'package:flutter_embedder/flutter_embedder.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initFlutterEmbedder();
   runApp(const SpamShieldApp());
 }
 
