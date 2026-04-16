@@ -289,10 +289,10 @@ class _SignInScreenState extends State<SignInScreen>
       child: OutlinedButton.icon(
         onPressed: (_loading || _googleLoading) ? null : _signInWithGoogle,
         icon: _googleLoading
-            ? const SizedBox(
+            ? SizedBox(
                 width: 18, height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary))
-            : const Icon(Icons.g_mobiledata_rounded, size: 24, color: AppTheme.textPrimary),
+            : Icon(Icons.g_mobiledata_rounded, size: 24, color: AppTheme.textPrimary),
         label: Text(
           _googleLoading ? 'Signing in...' : 'Continue with Google',
           style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 14),

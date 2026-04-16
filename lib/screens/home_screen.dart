@@ -199,7 +199,7 @@ class _DashboardTabState extends State<_DashboardTab>
           child: Stack(
             children: [
               IconButton(
-                icon: const Icon(Icons.notifications_outlined, color: AppTheme.textSecondary),
+                icon: Icon(Icons.notifications_outlined, color: AppTheme.textSecondary),
                 onPressed: () => _showNotificationLog(),
               ),
               if (_stats['spam']! > 0)
@@ -207,7 +207,7 @@ class _DashboardTabState extends State<_DashboardTab>
                   right: 8, top: 8,
                   child: Container(
                     width: 8, height: 8,
-                    decoration: const BoxDecoration(color: AppTheme.spamRed, shape: BoxShape.circle),
+                    decoration: BoxDecoration(color: AppTheme.spamRed, shape: BoxShape.circle),
                   ),
                 ),
             ],

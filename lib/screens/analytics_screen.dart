@@ -103,7 +103,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           const SizedBox(height: 16),
           Row(
             children: [
-              const _MiniStatCard(label: 'Real-time', value: 'ON', icon: Icons.bolt, color: AppTheme.accent),
+              _MiniStatCard(label: 'Real-time', value: 'ON', icon: Icons.bolt, color: AppTheme.accent),
               const SizedBox(width: 12),
               _MiniStatCard(label: 'Blocked', value: _stats['spam'].toString(), icon: Icons.block, color: AppTheme.spamRed),
             ],
@@ -405,18 +405,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           const SizedBox(height: 16),
           _SummaryRow(label: 'Real-time Stats', spam: _stats['spam']!, ham: _stats['ham']!),
           const Divider(color: Color(0xFF1E3050), height: 20),
-          Row(
-            children: [
-              const Icon(Icons.verified_user, color: AppTheme.accent, size: 18),
-              const SizedBox(width: 8),
-              Text('System synchronized with active inbox.',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppTheme.accent,
-                    fontWeight: FontWeight.w600,
-                  )),
-            ],
-          ),
+        ],
+      ),
+    );
+  }
+
   List<FlSpot> _getTrendSpots() {
     if (_messages.isEmpty) return const [FlSpot(0, 0), FlSpot(1, 0), FlSpot(2, 0), FlSpot(3, 0)];
     final now = DateTime.now();

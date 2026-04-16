@@ -176,7 +176,7 @@ class _SignUpScreenState extends State<SignUpScreen>
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: AppTheme.border),
                       ),
-                      child: const Icon(Icons.arrow_back_ios_new, size: 15, color: AppTheme.textPrimary),
+                      child: Icon(Icons.arrow_back_ios_new, size: 15, color: AppTheme.textPrimary),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -368,7 +368,7 @@ class _SignUpScreenState extends State<SignUpScreen>
         children: [
           Row(
             children: [
-              const Icon(Icons.security_outlined, size: 14, color: AppTheme.textMuted),
+              Icon(Icons.security_outlined, size: 14, color: AppTheme.textMuted),
               const SizedBox(width: 6),
               Text('Security Check — type the code below',
                   style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted,
@@ -409,7 +409,7 @@ class _SignUpScreenState extends State<SignUpScreen>
               ),
               IconButton(
                 onPressed: _refreshCaptcha,
-                icon: const Icon(Icons.refresh_rounded, color: AppTheme.textMuted),
+                icon: Icon(Icons.refresh_rounded, color: AppTheme.textMuted),
                 tooltip: 'New code',
               ),
             ],

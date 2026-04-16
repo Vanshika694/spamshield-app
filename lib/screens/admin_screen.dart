@@ -14,6 +14,7 @@ class AdminScreen extends StatefulWidget {
 class _AdminScreenState extends State<AdminScreen> {
   Map<String, int> _stats = {'total': 0, 'spam': 0, 'ham': 0};
   List<ProcessedSms> _flagged = [];
+  List<ProcessedSms> _messages = [];
   bool _isLoading = true;
 
   @override
@@ -32,6 +33,7 @@ class _AdminScreenState extends State<AdminScreen> {
     if (mounted) {
       setState(() {
         _stats = stats;
+        _messages = msgs;
         _flagged = flagged.take(4).toList();
         _isLoading = false;
       });

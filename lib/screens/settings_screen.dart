@@ -212,7 +212,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-          const Icon(Icons.edit_outlined, color: AppTheme.textMuted, size: 18),
+          Icon(Icons.edit_outlined, color: AppTheme.textMuted, size: 18),
         ],
       ),
     );
