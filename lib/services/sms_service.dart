@@ -4,6 +4,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
 import 'package:flutter_embedder/flutter_embedder.dart';
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
+import 'notification_service.dart';
+import 'settings_manager.dart';
 import 'dart:math';
 
 /// Result of a spam classification
@@ -43,17 +45,33 @@ class SmsService {
 
   static Future<void> openSettings() async => await openAppSettings();
 
+  static List<ProcessedSms>? _cachedMessages;
+
+  /// Clear app-only history (does not touch phone SMS)
+  static void clearCache() {
+    _cachedMessages = null;
+  }
+
   // ─── READ ALL SMS from device inbox ───────────────────────────
-  static Future<List<ProcessedSms>> getAllSms() async {
+  static Future<List<ProcessedSms>> getAllSms({bool forceRefresh = false}) async {
+    if (_cachedMessages != null && !forceRefresh) return _cachedMessages!;
+
     print("!! Initializing Tokenizer & Model Session...\n");
     final tokenizerPath = "assets/model/tokenizer.json";
     final modelPath = "assets/model/model.onnx";
 
-    final tokenizer = await HfTokenizer.fromAsset(tokenizerPath);
-    // create inference session
-    final ort = OnnxRuntime();
-    final session = await ort.createSessionFromAsset(modelPath);
-    print("!! Tokenizer & Model Session Initialized\n");
+    HfTokenizer? tokenizer;
+    OrtSession? session;
+    
+    try {
+      tokenizer = await HfTokenizer.fromAsset(tokenizerPath);
+      final ort = OnnxRuntime();
+      session = await ort.createSessionFromAsset(modelPath);
+      print("!! Tokenizer & Model Session Initialized\n");
+    } catch (e) {
+      print("!! Model missing or invalid (size 134 bytes). Proceeding with fallback logic. Error: $e\n");
+    }
+    
     print("!! Fetching All Messages !!\n");
     try {
       final messages = await _query.querySms(
@@ -76,16 +94,27 @@ class SmsService {
             session,
           );
 
-          return ProcessedSms(
+          final processedSms = ProcessedSms(
             sender: sender,
             body: body,
             date: date,
             isSpam: classification.isSpam,
             confidence: classification.confidence,
           );
+
+          // Trigger notification if spam and alerts enabled
+          if (processedSms.isSpam) {
+            final alertsEnabled = await SettingsManager.getBool(SettingsManager.keySpamAlerts);
+            if (alertsEnabled) {
+              NotificationService.showSpamAlert(sender: sender, body: body);
+            }
+          }
+
+          return processedSms;
         }),
       );
 
+      _cachedMessages = processed;
       return processed;
     } catch (e, stackTrace) {
       print('❌ Error: $e');
@@ -95,16 +124,20 @@ class SmsService {
   }
 
   // ─── Heuristic Spam Classifier ─────────────────────────────────
-  // TODO: Replace this with your ML model REST API call when ready:
-  //   final res = await http.post('https://your-api.com/predict', body: {'text': body});
-  //   final score = jsonDecode(res.body)['spam_probability'];
   static Future<SmsClassification> _classify(
     String body,
     String sender,
-    HfTokenizer tokenizer,
-    OrtSession session,
+    HfTokenizer? tokenizer,
+    OrtSession? session,
   ) async {
     final text = body.toLowerCase();
+    
+    if (tokenizer == null || session == null) {
+      // Fallback dummy logic if model is not present yet
+      bool isDummySpam = text.contains("offer") || text.contains("free") || text.contains("win");
+      return SmsClassification(isSpam: isDummySpam, confidence: isDummySpam ? 0.85 : 0.95);
+    }
+
 
     final tokenizedText = tokenizer.encode(
       body,

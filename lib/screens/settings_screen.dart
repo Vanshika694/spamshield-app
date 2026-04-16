@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
+import '../services/settings_manager.dart';
+import '../services/sms_service.dart';
+import '../services/notification_service.dart';
 import '../auth/signin_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -14,7 +17,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _spamNotifications = true;
   bool _autoScan          = true;
-  bool _darkMode          = true;
+  bool _darkMode          = AppTheme.isDarkMode.value;
   bool _realTimeDetection = true;
   bool _localOnly         = true;
   String _userName  = '';
@@ -28,7 +31,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadUser() async {
     final u = await AuthService.getUser();
-    if (mounted) setState(() { _userName = u.name; _userEmail = u.email; });
+    final sn = await SettingsManager.getBool(SettingsManager.keySpamAlerts);
+    final as = await SettingsManager.getBool(SettingsManager.keyAutoScan);
+    final rt = await SettingsManager.getBool(SettingsManager.keyRealTime);
+    final lo = await SettingsManager.getBool(SettingsManager.keyLocalOnly);
+
+    if (mounted) {
+      setState(() {
+        _userName = u.name;
+        _userEmail = u.email;
+        _spamNotifications = sn;
+        _autoScan = as;
+        _realTimeDetection = rt;
+        _localOnly = lo;
+      });
+    }
   }
 
   @override
@@ -54,29 +71,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _ToggleTile(icon: Icons.notifications_active_outlined, title: 'Spam Alerts',
                   subtitle: 'Get notified when spam is detected',
                   value: _spamNotifications, activeColor: AppTheme.accent,
-                  onChanged: (v) => setState(() => _spamNotifications = v)),
+                  onChanged: (v) async {
+                    if (v) {
+                      final granted = await NotificationService.requestPermission();
+                      if (!granted) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Notification permission denied'))
+                          );
+                        }
+                        return;
+                      }
+                    }
+                    setState(() => _spamNotifications = v);
+                    SettingsManager.setBool(SettingsManager.keySpamAlerts, v);
+                  }),
             ]),
             const SizedBox(height: 14),
             _buildSection('Detection', [
               _ToggleTile(icon: Icons.autorenew_rounded, title: 'Auto Scan',
                   subtitle: 'Automatically scan incoming SMS',
                   value: _autoScan, activeColor: AppTheme.hamGreen,
-                  onChanged: (v) => setState(() => _autoScan = v)),
+                  onChanged: (v) {
+                    setState(() => _autoScan = v);
+                    SettingsManager.setBool(SettingsManager.keyAutoScan, v);
+                  }),
               _ToggleTile(icon: Icons.bolt_rounded, title: 'Real-Time Detection',
                   subtitle: 'Instant analysis as messages arrive',
                   value: _realTimeDetection, activeColor: AppTheme.hamGreen,
-                  onChanged: (v) => setState(() => _realTimeDetection = v)),
+                  onChanged: (v) {
+                    setState(() => _realTimeDetection = v);
+                    SettingsManager.setBool(SettingsManager.keyRealTime, v);
+                  }),
             ]),
             const SizedBox(height: 14),
             _buildSection('Privacy', [
               _ToggleTile(icon: Icons.shield_outlined, title: 'Local Processing Only',
                   subtitle: 'Messages never leave your device',
                   value: _localOnly, activeColor: AppTheme.accent,
-                  onChanged: (v) => setState(() => _localOnly = v)),
+                  onChanged: (v) {
+                    setState(() => _localOnly = v);
+                    SettingsManager.setBool(SettingsManager.keyLocalOnly, v);
+                  }),
               _ToggleTile(icon: Icons.dark_mode_outlined, title: 'Dark Mode',
                   subtitle: 'Cybersecurity-inspired dark theme',
                   value: _darkMode, activeColor: AppTheme.purple,
-                  onChanged: (v) => setState(() => _darkMode = v)),
+                  onChanged: (v) {
+                    setState(() => _darkMode = v);
+                    AppTheme.isDarkMode.value = v;
+                    // Note: SettingsManager in main.dart listens to AppTheme.isDarkMode
+                  }),
             ]),
             const SizedBox(height: 14),
             _buildSection('General', [
@@ -240,7 +284,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context),
               child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textSecondary))),
-          TextButton(onPressed: () => Navigator.pop(context),
+          TextButton(
+              onPressed: () {
+                SmsService.clearCache();
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Message history cleared from app'))
+                );
+              },
               child: Text('Clear', style: GoogleFonts.inter(color: AppTheme.spamRed, fontWeight: FontWeight.w700))),
         ],
       ),

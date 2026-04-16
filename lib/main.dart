@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'auth/splash_screen.dart';
 import 'theme/app_theme.dart';
-import 'package:flutter_embedder/flutter_embedder.dart';
+import 'services/settings_manager.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initFlutterEmbedder();
+  await NotificationService.init();
+  await SettingsManager.init();
   runApp(const SpamShieldApp());
 }
 
@@ -14,11 +16,16 @@ class SpamShieldApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SpamShield',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      home: const SplashScreen(),
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppTheme.isDarkMode,
+      builder: (context, isDark, child) {
+        return MaterialApp(
+          title: 'SpamShield',
+          debugShowCheckedModeBanner: false,
+          theme: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
+          home: const SplashScreen(),
+        );
+      },
     );
   }
 }

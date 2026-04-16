@@ -3,10 +3,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
+import '../services/sms_service.dart';
 import 'classification_screen.dart';
 import 'analytics_screen.dart';
 import 'admin_screen.dart';
 import 'settings_screen.dart';
+import '../services/settings_manager.dart';
+import '../services/notification_service.dart';
+import 'dart:async';
+import 'dart:math';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -72,22 +77,60 @@ class _DashboardTabState extends State<_DashboardTab>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseCtrl;
   String _userName = 'User';
+  List<ProcessedSms> _messages = [];
+  bool _isLoading = true;
+  Map<String, int> _stats = {'total': 0, 'spam': 0, 'ham': 0};
+
+  Timer? _syncTimer;
 
   @override
   void initState() {
     super.initState();
     _pulseCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 3))
       ..repeat(reverse: true);
-    _loadUser();
+    _loadData();
+    _startSyncTimer();
   }
 
-  Future<void> _loadUser() async {
+  void _startSyncTimer() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
+      final autoScan = await SettingsManager.getBool(SettingsManager.keyAutoScan);
+      if (autoScan) {
+        await _loadData();
+        
+        final realTime = await SettingsManager.getBool(SettingsManager.keyRealTime);
+        if (realTime) {
+          NotificationService.showSpamAlert(
+            sender: "System",
+            body: "Real-time scan completed: ${_stats['spam']} threats currently tracked."
+          );
+        }
+      }
+    });
+  }
+
+  Future<void> _loadData() async {
     final user = await AuthService.getUser();
-    if (mounted) setState(() => _userName = user.name);
+    final msgs = await SmsService.getAllSms();
+    final stats = SmsService.getStats(msgs);
+    
+    if (mounted) {
+      setState(() {
+        _userName = user.name;
+        _messages = msgs;
+        _stats = stats;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
-  void dispose() { _pulseCtrl.dispose(); super.dispose(); }
+  void dispose() { 
+    _syncTimer?.cancel();
+    _pulseCtrl.dispose(); 
+    super.dispose(); 
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,20 +141,22 @@ class _DashboardTabState extends State<_DashboardTab>
           _buildSliverHeader(),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                const SizedBox(height: 8),
-                _buildSecurityStatusCard(),
-                const SizedBox(height: 20),
-                _buildStatsRow(),
-                const SizedBox(height: 20),
-                _buildChartCard(),
-                const SizedBox(height: 20),
-                _buildWeeklyTrendCard(),
-                const SizedBox(height: 20),
-                _buildRecentMessages(),
-              ]),
-            ),
+            sliver: _isLoading 
+              ? const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
+              : SliverList(
+                  delegate: SliverChildListDelegate([
+                    const SizedBox(height: 8),
+                    _buildSecurityStatusCard(),
+                    const SizedBox(height: 20),
+                    _buildStatsRow(),
+                    const SizedBox(height: 20),
+                    _buildChartCard(),
+                    const SizedBox(height: 20),
+                    _buildWeeklyTrendCard(),
+                    const SizedBox(height: 20),
+                    _buildRecentMessages(),
+                  ]),
+                ),
           ),
         ],
       ),
@@ -155,19 +200,101 @@ class _DashboardTabState extends State<_DashboardTab>
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications_outlined, color: AppTheme.textSecondary),
-                onPressed: () {},
+                onPressed: () => _showNotificationLog(),
               ),
-              Positioned(
-                right: 8, top: 8,
-                child: Container(
-                  width: 8, height: 8,
-                  decoration: const BoxDecoration(color: AppTheme.spamRed, shape: BoxShape.circle),
+              if (_stats['spam']! > 0)
+                Positioned(
+                  right: 8, top: 8,
+                  child: Container(
+                    width: 8, height: 8,
+                    decoration: const BoxDecoration(color: AppTheme.spamRed, shape: BoxShape.circle),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  void _showNotificationLog() {
+    final spamMsgs = _messages.where((m) => m.isSpam).toList();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: AppTheme.bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: AppTheme.border),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Security Alerts',
+                    style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text('Recent spam messages detected on your device',
+                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary)),
+            const SizedBox(height: 20),
+            Expanded(
+              child: spamMsgs.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.shield_outlined, size: 48, color: AppTheme.textMuted),
+                        const SizedBox(height: 12),
+                        Text('No active threats detected',
+                            style: GoogleFonts.inter(color: AppTheme.textMuted)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: spamMsgs.length,
+                    itemBuilder: (context, index) {
+                      final m = spamMsgs[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.card,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppTheme.spamRed.withValues(alpha: 0.15)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, color: AppTheme.spamRed, size: 16),
+                                const SizedBox(width: 8),
+                                Text(m.sender, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.textPrimary)),
+                                const Spacer(),
+                                Text('${(m.confidence * 100).toStringAsFixed(0)}% risk',
+                                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.spamRed)),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(m.body, style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary, height: 1.4)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -182,9 +309,9 @@ class _DashboardTabState extends State<_DashboardTab>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF1D4ED8).withValues(alpha: 0.5),
-                const Color(0xFF0F172A),
-                const Color(0xFF1E293B),
+                AppTheme.primary.withValues(alpha: 0.5),
+                AppTheme.bg,
+                AppTheme.surface,
               ],
             ),
             borderRadius: BorderRadius.circular(18),
@@ -261,7 +388,7 @@ class _DashboardTabState extends State<_DashboardTab>
               // Security score
               Column(
                 children: [
-                  Text('92',
+                  Text(_stats['total'] == 0 ? '100' : (100 - ((_stats['spam']!/_stats['total']!) * 100)).toStringAsFixed(0),
                       style: GoogleFonts.inter(
                           fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.accent)),
                   Text('/ 100',
@@ -280,25 +407,31 @@ class _DashboardTabState extends State<_DashboardTab>
   }
 
   Widget _buildStatsRow() {
+    final spamPct = _stats['total'] == 0 ? 0.0 : (_stats['spam']! / _stats['total']!) * 100;
+    final safePct = 100.0 - spamPct;
     return Row(
       children: [
-        _StatCard(label: 'Total SMS', count: '248', icon: Icons.chat_bubble_outline_rounded, color: AppTheme.accent, sub: '+12 today'),
+        _StatCard(label: 'Total SMS', count: _stats['total'].toString(), icon: Icons.chat_bubble_outline_rounded, color: AppTheme.accent, sub: 'All analysed'),
         const SizedBox(width: 10),
-        _StatCard(label: 'Spam', count: '47', icon: Icons.dangerous_outlined, color: AppTheme.spamRed, sub: '18.9%'),
+        _StatCard(label: 'Spam', count: _stats['spam'].toString(), icon: Icons.dangerous_outlined, color: AppTheme.spamRed, sub: '${spamPct.toStringAsFixed(1)}%'),
         const SizedBox(width: 10),
-        _StatCard(label: 'Safe', count: '201', icon: Icons.check_circle_outline_rounded, color: AppTheme.hamGreen, sub: '81.1%'),
+        _StatCard(label: 'Safe', count: _stats['ham'].toString(), icon: Icons.check_circle_outline_rounded, color: AppTheme.hamGreen, sub: '${safePct.toStringAsFixed(1)}%'),
       ],
     );
   }
 
   Widget _buildChartCard() {
+    final spamVal = _stats['spam']!.toDouble();
+    final hamVal = _stats['ham']!.toDouble();
+    final spamPct = _stats['total'] == 0 ? 0 : ((spamVal / _stats['total']!) * 100).toInt();
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: AppTheme.glassCard(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(title: 'Detection Overview', subtitle: '248 messages analysed'),
+          _SectionHeader(title: 'Detection Overview', subtitle: '${_stats['total']} messages analysed'),
           const SizedBox(height: 18),
           Row(
             children: [
@@ -312,14 +445,14 @@ class _DashboardTabState extends State<_DashboardTab>
                       sectionsSpace: 3,
                       centerSpaceRadius: 38,
                       sections: [
-                        PieChartSectionData(value: 47, color: AppTheme.spamRed, radius: 32, showTitle: false),
-                        PieChartSectionData(value: 201, color: AppTheme.hamGreen, radius: 32, showTitle: false),
+                        PieChartSectionData(value: spamVal == 0 && hamVal == 0 ? 1 : spamVal, color: AppTheme.spamRed, radius: 32, showTitle: false),
+                        PieChartSectionData(value: spamVal == 0 && hamVal == 0 ? 0 : hamVal, color: AppTheme.hamGreen, radius: 32, showTitle: false),
                       ],
                     )),
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('19%',
+                        Text('$spamPct%',
                             style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.spamRed)),
                         Text('spam',
                             style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textMuted)),
@@ -333,9 +466,9 @@ class _DashboardTabState extends State<_DashboardTab>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _LegendRow(color: AppTheme.hamGreen, label: 'Safe messages', value: '201', pct: '81%'),
+                    _LegendRow(color: AppTheme.hamGreen, label: 'Safe messages', value: _stats['ham'].toString(), pct: '${(100-spamPct)}%'),
                     const SizedBox(height: 16),
-                    _LegendRow(color: AppTheme.spamRed, label: 'Spam detected', value: '47', pct: '19%'),
+                    _LegendRow(color: AppTheme.spamRed, label: 'Spam detected', value: _stats['spam'].toString(), pct: '$spamPct%'),
                     const SizedBox(height: 20),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -344,7 +477,7 @@ class _DashboardTabState extends State<_DashboardTab>
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: AppTheme.accent.withValues(alpha: 0.2)),
                       ),
-                      child: Text('⚡ 40% less spam\nthan last week',
+                      child: Text('🛡️ Data synchronized\nwith real-time inbox',
                           style: GoogleFonts.inter(
                               fontSize: 11, color: AppTheme.accent, height: 1.5)),
                     ),
@@ -359,8 +492,20 @@ class _DashboardTabState extends State<_DashboardTab>
   }
 
   Widget _buildWeeklyTrendCard() {
-    final data = [4.0, 7.0, 2.0, 9.0, 5.0, 11.0, 7.0];
+    // Generate simple weekly data based on current messages
+    final Map<int, int> counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0};
+    for (var m in _messages.where((x) => x.isSpam)) {
+      counts[m.date.weekday] = (counts[m.date.weekday] ?? 0) + 1;
+    }
+    
     final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final barData = [
+      counts[1]!.toDouble(), counts[2]!.toDouble(), counts[3]!.toDouble(),
+      counts[4]!.toDouble(), counts[5]!.toDouble(), counts[6]!.toDouble(), counts[7]!.toDouble()
+    ];
+    
+    double maxV = barData.reduce(max);
+    if (maxV < 5) maxV = 5;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -373,7 +518,7 @@ class _DashboardTabState extends State<_DashboardTab>
           SizedBox(
             height: 100,
             child: BarChart(BarChartData(
-              maxY: 14,
+              maxY: maxV * 1.2,
               barTouchData: BarTouchData(enabled: false),
               gridData: FlGridData(
                 show: true,
@@ -393,10 +538,10 @@ class _DashboardTabState extends State<_DashboardTab>
                       style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textMuted)),
                 )),
               ),
-              barGroups: List.generate(data.length, (i) => BarChartGroupData(
+              barGroups: List.generate(barData.length, (i) => BarChartGroupData(
                 x: i,
                 barRods: [BarChartRodData(
-                  toY: data[i],
+                  toY: barData[i],
                   width: 18,
                   borderRadius: BorderRadius.circular(5),
                   gradient: LinearGradient(
@@ -414,12 +559,7 @@ class _DashboardTabState extends State<_DashboardTab>
   }
 
   Widget _buildRecentMessages() {
-    final msgs = [
-      {'s': '+91 98765 43210', 'p': "Congratulations! You've won ₹50,000. Click now!", 'spam': true,  't': '9:23 AM'},
-      {'s': 'Mom',             'p': 'Are you coming home for dinner tonight?',          'spam': false, 't': '8:45 AM'},
-      {'s': 'HDFC Bank',       'p': 'Your account credited with ₹5,000 on 11/03/26.',  'spam': false, 't': '7:30 AM'},
-      {'s': '+1 800 FREE',     'p': 'URGENT: Claim your FREE iPhone 15 now!',           'spam': true,  't': '6:15 AM'},
-    ];
+    final msgs = _messages.take(6).toList();
 
     return Container(
       decoration: AppTheme.glassCard(),
@@ -437,14 +577,26 @@ class _DashboardTabState extends State<_DashboardTab>
               ],
             ),
           ),
+          if (msgs.isEmpty)
+             const Padding(
+               padding: EdgeInsets.all(30.0),
+               child: Text('No messages found'),
+             ),
           ...msgs.asMap().entries.map((e) {
             final m = e.value;
             final isLast = e.key == msgs.length - 1;
+            
+            // Manual DateFormatting similar to 'h:mm a'
+            final int hour12 = m.date.hour > 12 ? m.date.hour - 12 : (m.date.hour == 0 ? 12 : m.date.hour);
+            final String minuteStr = m.date.minute.toString().padLeft(2, '0');
+            final String period = m.date.hour >= 12 ? 'PM' : 'AM';
+            final formattedTime = '$hour12:$minuteStr $period';
+
             return _MsgTile(
-              sender: m['s'] as String,
-              preview: m['p'] as String,
-              isSpam: m['spam'] as bool,
-              time: m['t'] as String,
+              sender: m.sender,
+              preview: m.body,
+              isSpam: m.isSpam,
+              time: formattedTime,
               isLast: isLast,
             );
           }),

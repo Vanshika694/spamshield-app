@@ -137,9 +137,9 @@ class _SignInScreenState extends State<SignInScreen>
           controller: _emailCtrl,
           keyboardType: TextInputType.emailAddress,
           style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 14),
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Email address',
-            prefixIcon: Icon(Icons.mail_outline_rounded),
+            prefixIcon: const Icon(Icons.mail_outline_rounded),
           ),
           validator: (v) => (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
         ),
@@ -218,9 +218,14 @@ class _SignInScreenState extends State<SignInScreen>
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           child: _loading
-              ? const SizedBox(
-                  width: 20, height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              ? SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: AppTheme.accent.withValues(alpha: 0.7),
+                  ),
+                )
               : Text('Sign In',
                   style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
         ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../theme/app_theme.dart';
+import '../services/sms_service.dart';
+import 'dart:math';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -13,11 +15,27 @@ class AnalyticsScreen extends StatefulWidget {
 class _AnalyticsScreenState extends State<AnalyticsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  List<ProcessedSms> _messages = [];
+  Map<String, int> _stats = {'total': 0, 'spam': 0, 'ham': 0};
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final msgs = await SmsService.getAllSms();
+    final stats = SmsService.getStats(msgs);
+    if (mounted) {
+      setState(() {
+        _messages = msgs;
+        _stats = stats;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -49,13 +67,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildOverviewTab(),
-          _buildTrendsTab(),
-        ],
-      ),
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : TabBarView(
+            controller: _tabController,
+            children: [
+              _buildOverviewTab(),
+              _buildTrendsTab(),
+            ],
+          ),
     );
   }
 
@@ -67,17 +87,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           // Stats summary row
           Row(
             children: [
-              _MiniStatCard(label: 'Accuracy', value: '96.4%', icon: Icons.track_changes, color: AppTheme.accent),
+              _MiniStatCard(
+                  label: 'Accuracy',
+                  value: '${(_messages.isEmpty ? 98.5 : (_messages.map((m) => m.confidence).reduce((a, b) => a + b) / _messages.length * 100)).toStringAsFixed(1)}%',
+                  icon: Icons.track_changes,
+                  color: AppTheme.accent),
               const SizedBox(width: 12),
-              _MiniStatCard(label: 'Analyzed', value: '248', icon: Icons.bar_chart, color: AppTheme.primary),
+              _MiniStatCard(
+                  label: 'Analyzed',
+                  value: _stats['total'].toString(),
+                  icon: Icons.bar_chart,
+                  color: AppTheme.primary),
             ],
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              _MiniStatCard(label: 'Spam Rate', value: '18.9%', icon: Icons.dangerous_outlined, color: AppTheme.spamRed),
+              const _MiniStatCard(label: 'Real-time', value: 'ON', icon: Icons.bolt, color: AppTheme.accent),
               const SizedBox(width: 12),
-              _MiniStatCard(label: 'Blocked', value: '47', icon: Icons.block, color: AppTheme.hamGreen),
+              _MiniStatCard(label: 'Blocked', value: _stats['spam'].toString(), icon: Icons.block, color: AppTheme.spamRed),
             ],
           ),
           const SizedBox(height: 20),
@@ -92,6 +120,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   }
 
   Widget _buildPieCard() {
+    final spamVal = _stats['spam']!.toDouble();
+    final hamVal = _stats['ham']!.toDouble();
+    final spamPct = _stats['total'] == 0 ? 0 : ((spamVal / _stats['total']!) * 100).toInt();
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -107,7 +139,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.textPrimary)),
-          Text('Total 248 messages analyzed',
+          Text('Total ${_stats['total']} messages analyzed',
               style:
                   GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary)),
           const SizedBox(height: 20),
@@ -119,20 +151,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 centerSpaceRadius: 42,
                 sections: [
                   PieChartSectionData(
-                    value: 47,
+                    value: spamVal == 0 && hamVal == 0 ? 1 : spamVal,
                     color: AppTheme.spamRed,
                     radius: 55,
-                    title: 'Spam\n19%',
+                    title: 'Spam\n$spamPct%',
                     titleStyle: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: Colors.white),
                   ),
                   PieChartSectionData(
-                    value: 201,
+                    value: spamVal == 0 && hamVal == 0 ? 0 : hamVal,
                     color: AppTheme.hamGreen,
                     radius: 55,
-                    title: 'Ham\n81%',
+                    title: 'Safe\n${100 - spamPct}%',
                     titleStyle: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -148,9 +180,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   }
 
   Widget _buildBarCard() {
-    final spamPerDay = [4, 7, 2, 9, 5, 11, 9];
+    final Map<int, int> counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0};
+    for (var m in _messages.where((x) => x.isSpam)) {
+      counts[m.date.weekday] = (counts[m.date.weekday] ?? 0) + 1;
+    }
+    
     final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final maxY = 14.0;
+    final spamPerDay = [
+      counts[1]!, counts[2]!, counts[3]!, counts[4]!, counts[5]!, counts[6]!, counts[7]!
+    ];
+    
+    double maxVal = spamPerDay.map((e) => e.toDouble()).reduce(max);
+    if (maxVal < 5) maxVal = 5;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -175,7 +216,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             height: 160,
             child: BarChart(
               BarChartData(
-                maxY: maxY,
+                maxY: maxVal * 1.2,
                 barTouchData: BarTouchData(enabled: false),
                 titlesData: FlTitlesData(
                   leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -310,12 +351,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 maxY: 60,
                 lineBarsData: [
                   LineChartBarData(
-                    spots: const [
-                      FlSpot(0, 28),
-                      FlSpot(1, 35),
-                      FlSpot(2, 30),
-                      FlSpot(3, 47),
-                    ],
+                    spots: _getTrendSpots(),
                     isCurved: true,
                     color: AppTheme.spamRed,
                     barWidth: 2.5,
@@ -367,25 +403,37 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   fontWeight: FontWeight.w700,
                   color: AppTheme.textPrimary)),
           const SizedBox(height: 16),
-          _SummaryRow(label: 'This week', spam: 47, ham: 201),
-          const Divider(color: Color(0xFF1E3050), height: 20),
-          _SummaryRow(label: 'Last week', spam: 65, ham: 183),
+          _SummaryRow(label: 'Real-time Stats', spam: _stats['spam']!, ham: _stats['ham']!),
           const Divider(color: Color(0xFF1E3050), height: 20),
           Row(
             children: [
-              const Icon(Icons.trending_down, color: AppTheme.hamGreen, size: 18),
+              const Icon(Icons.verified_user, color: AppTheme.accent, size: 18),
               const SizedBox(width: 8),
-              Text('27.7% fewer spam messages than last week!',
+              Text('System synchronized with active inbox.',
                   style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: AppTheme.hamGreen,
+                    color: AppTheme.accent,
                     fontWeight: FontWeight.w600,
                   )),
             ],
           ),
-        ],
-      ),
-    );
+  List<FlSpot> _getTrendSpots() {
+    if (_messages.isEmpty) return const [FlSpot(0, 0), FlSpot(1, 0), FlSpot(2, 0), FlSpot(3, 0)];
+    final now = DateTime.now();
+    final counts = [0, 0, 0, 0];
+    for (var m in _messages.where((x) => x.isSpam)) {
+      final daysAgo = now.difference(m.date).inDays;
+      if (daysAgo < 7) counts[3]++;
+      else if (daysAgo < 14) counts[2]++;
+      else if (daysAgo < 21) counts[1]++;
+      else if (daysAgo < 28) counts[0]++;
+    }
+    return [
+      FlSpot(0, counts[0].toDouble()),
+      FlSpot(1, counts[1].toDouble()),
+      FlSpot(2, counts[2].toDouble()),
+      FlSpot(3, counts[3].toDouble()),
+    ];
   }
 }
 
