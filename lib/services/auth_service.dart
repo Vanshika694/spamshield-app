@@ -177,7 +177,7 @@ class AuthService {
   }
 
   // ─── FEEDBACK LOOP ───────────────────────────────────────────
-  static Future<void> submitFeedback({
+  static Future<bool> submitFeedback({
     required String messageBody,
     required String label,
     double confidence = 0,
@@ -186,7 +186,7 @@ class AuthService {
       final user = await getUser();
       final feedbackUrl = _baseUrl.replaceAll('/auth', '/feedback/report');
 
-      await http.post(
+      final res = await http.post(
         Uri.parse(feedbackUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -195,11 +195,18 @@ class AuthService {
           'label': label,
           'confidence': confidence,
         }),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 8));
       
-      print('✅ Feedback sent for retraining: $label');
+      if (res.statusCode == 201) {
+        print('✅ Feedback sent for retraining: $label');
+        return true;
+      } else {
+        print('❌ Server error: ${res.body}');
+        return false;
+      }
     } catch (e) {
       print('❌ Failed to send feedback: $e');
+      return false;
     }
   }
 }

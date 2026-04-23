@@ -369,16 +369,21 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
               // Actions
               Row(children: [
                 Expanded(child: OutlinedButton.icon(
-                  onPressed: () {
-                    AuthService.submitFeedback(
+                  onPressed: () async {
+                    final success = await AuthService.submitFeedback(
                       messageBody: sms.body,
                       label: 'not spam',
                       confidence: sms.confidence,
                     );
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Marked as Safe. Thanks for feedback!'))
-                    );
+                    if (mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(success ? 'Marked as Safe. Thanks!' : 'Error: Check server logs'),
+                          backgroundColor: success ? AppTheme.hamGreen : AppTheme.spamRed,
+                        )
+                      );
+                    }
                   },
                   icon: const Icon(Icons.check_circle_outline, size: 16),
                   label: Text('Mark Safe', style: GoogleFonts.inter(fontSize: 13)),
@@ -391,16 +396,21 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
                 )),
                 const SizedBox(width: 10),
                 Expanded(child: OutlinedButton.icon(
-                  onPressed: () {
-                    AuthService.submitFeedback(
+                  onPressed: () async {
+                    final success = await AuthService.submitFeedback(
                       messageBody: sms.body,
                       label: 'spam',
                       confidence: sms.confidence,
                     );
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Reported as Spam. Data saved!'))
-                    );
+                    if (mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(success ? 'Reported as Spam. Data saved!' : 'Error: Check server logs'),
+                          backgroundColor: success ? AppTheme.spamRed : AppTheme.spamRed,
+                        )
+                      );
+                    }
                   },
                   icon: const Icon(Icons.block, size: 16),
                   label: Text('Mark Spam', style: GoogleFonts.inter(fontSize: 13)),
