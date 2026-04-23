@@ -175,6 +175,33 @@ class AuthService {
     await prefs.remove(_kId);
     // Keep name/email/password for next login
   }
+
+  // ─── FEEDBACK LOOP ───────────────────────────────────────────
+  static Future<void> submitFeedback({
+    required String messageBody,
+    required String label,
+    double confidence = 0,
+  }) async {
+    try {
+      final user = await getUser();
+      final feedbackUrl = _baseUrl.replaceAll('/auth', '/feedback/report');
+
+      await http.post(
+        Uri.parse(feedbackUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'username': user.name,
+          'messageBody': messageBody,
+          'label': label,
+          'confidence': confidence,
+        }),
+      ).timeout(const Duration(seconds: 5));
+      
+      print('✅ Feedback sent for retraining: $label');
+    } catch (e) {
+      print('❌ Failed to send feedback: $e');
+    }
+  }
 }
 
 class AuthResult {

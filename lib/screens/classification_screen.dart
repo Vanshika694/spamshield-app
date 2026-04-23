@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/sms_service.dart';
+import '../services/auth_service.dart';
 
 class ClassificationScreen extends StatefulWidget {
   const ClassificationScreen({super.key});
@@ -368,7 +369,17 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
               // Actions
               Row(children: [
                 Expanded(child: OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    AuthService.submitFeedback(
+                      messageBody: sms.body,
+                      label: 'not spam',
+                      confidence: sms.confidence,
+                    );
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Marked as Safe. Thanks for feedback!'))
+                    );
+                  },
                   icon: const Icon(Icons.check_circle_outline, size: 16),
                   label: Text('Mark Safe', style: GoogleFonts.inter(fontSize: 13)),
                   style: OutlinedButton.styleFrom(
@@ -380,7 +391,17 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
                 )),
                 const SizedBox(width: 10),
                 Expanded(child: OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    AuthService.submitFeedback(
+                      messageBody: sms.body,
+                      label: 'spam',
+                      confidence: sms.confidence,
+                    );
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Reported as Spam. Data saved!'))
+                    );
+                  },
                   icon: const Icon(Icons.block, size: 16),
                   label: Text('Mark Spam', style: GoogleFonts.inter(fontSize: 13)),
                   style: OutlinedButton.styleFrom(

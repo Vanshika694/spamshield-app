@@ -17,9 +17,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _spamNotifications = true;
   bool _autoScan          = true;
-  bool _darkMode          = AppTheme.isDarkMode.value;
   bool _realTimeDetection = true;
-  bool _localOnly         = true;
   String _userName  = '';
   String _userEmail = '';
 
@@ -43,7 +41,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _spamNotifications = sn;
         _autoScan = as;
         _realTimeDetection = rt;
-        _localOnly = lo;
       });
     }
   }
@@ -102,24 +99,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (v) {
                     setState(() => _realTimeDetection = v);
                     SettingsManager.setBool(SettingsManager.keyRealTime, v);
-                  }),
-            ]),
-            const SizedBox(height: 14),
-            _buildSection('Privacy', [
-              _ToggleTile(icon: Icons.shield_outlined, title: 'Local Processing Only',
-                  subtitle: 'Messages never leave your device',
-                  value: _localOnly, activeColor: AppTheme.accent,
-                  onChanged: (v) {
-                    setState(() => _localOnly = v);
-                    SettingsManager.setBool(SettingsManager.keyLocalOnly, v);
-                  }),
-              _ToggleTile(icon: Icons.dark_mode_outlined, title: 'Dark Mode',
-                  subtitle: 'Cybersecurity-inspired dark theme',
-                  value: _darkMode, activeColor: AppTheme.purple,
-                  onChanged: (v) {
-                    setState(() => _darkMode = v);
-                    AppTheme.isDarkMode.value = v;
-                    // Note: SettingsManager in main.dart listens to AppTheme.isDarkMode
                   }),
             ]),
             const SizedBox(height: 14),

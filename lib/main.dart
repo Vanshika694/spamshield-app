@@ -16,16 +16,11 @@ class SpamShieldApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: AppTheme.isDarkMode,
-      builder: (context, isDark, child) {
-        return MaterialApp(
-          title: 'SpamShield',
-          debugShowCheckedModeBanner: false,
-          theme: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
-          home: const SplashScreen(),
-        );
-      },
+    return MaterialApp(
+      title: 'SpamShield',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.darkTheme,
+      home: const SplashScreen(),
     );
   }
 }

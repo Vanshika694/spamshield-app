@@ -6,20 +6,8 @@ class SettingsManager {
   static const _kAutoScan   = 'auto_scan';
   static const _kRealTime   = 'real_time_detection';
   static const _kLocalOnly  = 'local_only';
-  static const _kDarkMode   = 'dark_mode';
-
   static Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    // Theme persistence
-    bool isDark = prefs.getBool(_kDarkMode) ?? true;
-    AppTheme.isDarkMode.value = isDark;
-    
-    // Hook listener to save theme changes
-    AppTheme.isDarkMode.addListener(() async {
-      final p = await SharedPreferences.getInstance();
-      await p.setBool(_kDarkMode, AppTheme.isDarkMode.value);
-    });
+    // No-op for now, but kept for consistency
   }
 
   static Future<bool> getBool(String key, {bool defaultValue = true}) async {
