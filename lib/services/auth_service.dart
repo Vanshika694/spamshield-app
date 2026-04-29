@@ -57,7 +57,7 @@ class AuthService {
         Uri.parse('$_baseUrl/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'name': name, 'email': email, 'password': password, 'phone': phone}),
-      ).timeout(const Duration(seconds: 6));
+      ).timeout(const Duration(seconds: 20));
 
       final data = jsonDecode(res.body);
       if (res.statusCode == 201 && data['success'] == true) {
@@ -90,7 +90,7 @@ class AuthService {
         Uri.parse('$_baseUrl/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
-      ).timeout(const Duration(seconds: 6));
+      ).timeout(const Duration(seconds: 15));
 
       final data = jsonDecode(res.body);
       if (res.statusCode == 200 && data['success'] == true) {
@@ -130,7 +130,7 @@ class AuthService {
         Uri.parse('$_baseUrl/google'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'idToken': idToken}),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(res.body);
       if (res.statusCode == 200 && data['success'] == true) {
