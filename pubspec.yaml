@@ -21,6 +21,7 @@ dependencies:
   flutter_onnxruntime: ^1.6.0
   flutter_embedder: ^0.1.7
   flutter_local_notifications: ^17.2.1
+  another_telephony: ^0.4.1
 
 dev_dependencies:
   flutter_test:

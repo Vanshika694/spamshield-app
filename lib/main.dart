@@ -3,14 +3,17 @@ import 'auth/splash_screen.dart';
 import 'theme/app_theme.dart';
 import 'services/settings_manager.dart';
 import 'services/notification_service.dart';
+import 'services/sms_service.dart';
+import 'services/sms_listener.dart';
 import 'package:flutter_embedder/flutter_embedder.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.init();
   await SettingsManager.init();
-  // await RustLib.init();
   await initFlutterEmbedder();
+  await SmsService.initModel();
+  SmsListener.start();
   runApp(const SpamShieldApp());
 }
 

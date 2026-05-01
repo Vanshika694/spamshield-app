@@ -46,8 +46,54 @@ class SmsService {
 
   static Future<void> openSettings() async => await openAppSettings();
 
+  static HfTokenizer? _tokenizer;
+  static OrtSession? _session;
   static List<ProcessedSms>? _cachedMessages;
   static Future<List<ProcessedSms>>? _loadingFuture;
+
+  static Future<void> initModel() async {
+    if (_tokenizer != null && _session != null) return;
+    try {
+      _tokenizer = await HfTokenizer.fromAsset("assets/model/tokenizer.json");
+      final ort = OnnxRuntime();
+      _session = await ort.createSessionFromAsset("assets/model/model.onnx");
+      print("!! Model Initialized\n");
+      print('Model Inputs:  ${_session!.inputNames}');
+      print('Model Outputs: ${_session!.outputNames}');
+    } catch (e) {
+      print("!! Model init failed: $e\n");
+    }
+  }
+
+  static Future<SmsClassification> classifyText(String text) async {
+    print("Classification Started !!");
+    if (_tokenizer == null || _session == null) {
+      final t = text.toLowerCase();
+      final isDummySpam =
+          t.contains("offer") || t.contains("free") || t.contains("win");
+      return SmsClassification(
+        isSpam: isDummySpam,
+        confidence: isDummySpam ? 0.85 : 0.95,
+      );
+    }
+    final tokenized = _tokenizer!.encode(text, addSpecialTokens: true);
+    final inputIds = Int64List.fromList(tokenized.ids);
+    final attentionMask = Int64List.fromList(tokenized.attentionMask);
+    final seqLen = tokenized.ids.length;
+    final inputs = {
+      'input_ids': await OrtValue.fromList(inputIds, [1, seqLen]),
+      'attention_mask': await OrtValue.fromList(attentionMask, [1, seqLen]),
+    };
+    final outputs = await _session!.run(inputs);
+    final raw = await outputs['logits']!.asList();
+    final logits = ((raw as List)[0] as List).cast<double>();
+    final spamScore = _softmaxSpam(logits[0], logits[1]);
+    final confidence = spamScore.clamp(0.0, 1.0);
+    return SmsClassification(
+      isSpam: confidence >= 0.35,
+      confidence: confidence >= 0.35 ? confidence : (1.0 - confidence),
+    );
+  }
 
   /// Clear app-only history (does not touch phone SMS)
   static void clearCache() {
@@ -56,7 +102,9 @@ class SmsService {
   }
 
   // ─── READ ALL SMS from device inbox ───────────────────────────
-  static Future<List<ProcessedSms>> getAllSms({bool forceRefresh = false}) async {
+  static Future<List<ProcessedSms>> getAllSms({
+    bool forceRefresh = false,
+  }) async {
     if (_cachedMessages != null && !forceRefresh) return _cachedMessages!;
     if (_loadingFuture != null && !forceRefresh) return _loadingFuture!;
 
@@ -71,37 +119,13 @@ class SmsService {
   }
 
   static Future<List<ProcessedSms>> _doGetAllSms() async {
-    print("!! Initializing Tokenizer & Model Session...\n");
-    final tokenizerPath = "assets/model/tokenizer.json";
-    final modelPath = "assets/model/model.onnx";
+    await initModel();
 
-    HfTokenizer? tokenizer;
-    OrtSession? session;
-    
-    try {
-      tokenizer = await HfTokenizer.fromAsset(tokenizerPath);
-      final ort = OnnxRuntime();
-      session = await ort.createSessionFromAsset(modelPath);
-      print("!! Tokenizer Initialized\n");
-    } catch (e) {
-      print("Tokenizer Missing $e\n");
-    }
-
-    try {
-      final ort = OnnxRuntime();
-      session = await ort.createSessionFromAsset(modelPath);
-      print("Model Session Initialized\n");
-      print('Model Inputs:  ${session.inputNames}');
-      print('Model Outputs: ${session.outputNames}');
-    } catch (e) {
-      print("!! Model missing or invalid (size 134 bytes). Proceeding with fallback logic. Error: $e\n");
-    }
-    
     print("!! Fetching All Messages !!\n");
     try {
       final messages = await _query.querySms(
         kinds: [SmsQueryKind.inbox],
-        count: 500, // limit to 500 most recent
+        count: 50, // limit to 500 most recent
       );
 
       print("Got all Messages, classifying in batches...\n");
@@ -112,9 +136,16 @@ class SmsService {
         final batch = messages.sublist(i, end);
         final texts = batch.map((s) => s.body ?? '').toList();
 
-        if (_kDebug) print("Batch ${i ~/ batchSize + 1}/${(messages.length / batchSize).ceil()}: ${texts.length} messages");
+        if (_kDebug)
+          print(
+            "Batch ${i ~/ batchSize + 1}/${(messages.length / batchSize).ceil()}: ${texts.length} messages",
+          );
 
-        final classifications = await _classifyBatch(texts, tokenizer!, session!);
+        final classifications = await _classifyBatch(
+          texts,
+          _tokenizer!,
+          _session!,
+        );
 
         for (int j = 0; j < batch.length; j++) {
           final sms = batch[j];
@@ -129,7 +160,9 @@ class SmsService {
           processed.add(processedSms);
 
           if (processedSms.isSpam) {
-            final alertsEnabled = await SettingsManager.getBool(SettingsManager.keySpamAlerts);
+            final alertsEnabled = await SettingsManager.getBool(
+              SettingsManager.keySpamAlerts,
+            );
             if (alertsEnabled) {
               NotificationService.showSpamAlert(
                 sender: processedSms.sender,
@@ -184,10 +217,14 @@ class SmsService {
 
     final batchSize = texts.length;
     final inputs = {
-      'input_ids': await OrtValue.fromList(
-          Int64List.fromList(allIds), [batchSize, maxLen]),
-      'attention_mask': await OrtValue.fromList(
-          Int64List.fromList(allMasks), [batchSize, maxLen]),
+      'input_ids': await OrtValue.fromList(Int64List.fromList(allIds), [
+        batchSize,
+        maxLen,
+      ]),
+      'attention_mask': await OrtValue.fromList(Int64List.fromList(allMasks), [
+        batchSize,
+        maxLen,
+      ]),
     };
 
     final outputs = await session.run(inputs);
@@ -201,10 +238,12 @@ class SmsService {
       final spamScore = _softmaxSpam(logits[0], logits[1]);
       if (_kDebug) print('SPAM: ${(spamScore * 100).toStringAsFixed(1)}%');
       final confidence = spamScore.clamp(0.0, 1.0);
-      results.add(SmsClassification(
-        isSpam: confidence >= 0.35,
-        confidence: confidence >= 0.35 ? confidence : (1.0 - confidence),
-      ));
+      results.add(
+        SmsClassification(
+          isSpam: confidence >= 0.35,
+          confidence: confidence >= 0.35 ? confidence : (1.0 - confidence),
+        ),
+      );
     }
     return results;
   }
