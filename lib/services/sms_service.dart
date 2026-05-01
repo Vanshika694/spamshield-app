@@ -90,38 +90,38 @@ class SmsService {
         count: 500, // limit to 500 most recent
       );
 
-      print("Got all Messages, classifying sequentially...\n");
+      print("Got all Messages, classifying in batches...\n");
+      const batchSize = 32;
       final processed = <ProcessedSms>[];
-      for (int i = 0; i < messages.length; i++) {
-        final sms = messages[i];
-        final body = sms.body ?? '';
-        final sender = sms.sender ?? 'Unknown';
-        final date = sms.date ?? DateTime.now();
+      for (int i = 0; i < messages.length; i += batchSize) {
+        final end = min(i + batchSize, messages.length);
+        final batch = messages.sublist(i, end);
+        final texts = batch.map((s) => s.body ?? '').toList();
 
-        if (_kDebug) print("[${i + 1}/${messages.length}] ${sender}: $body");
+        if (_kDebug) print("Batch ${i ~/ batchSize + 1}/${(messages.length / batchSize).ceil()}: ${texts.length} messages");
 
-        final classification = await _classify(
-          body,
-          sender,
-          tokenizer!,
-          session!,
-        );
+        final classifications = await _classifyBatch(texts, tokenizer!, session!);
 
-        final processedSms = ProcessedSms(
-          sender: sender,
-          body: body,
-          date: date,
-          isSpam: classification.isSpam,
-          confidence: classification.confidence,
-        );
+        for (int j = 0; j < batch.length; j++) {
+          final sms = batch[j];
+          final classification = classifications[j];
+          final processedSms = ProcessedSms(
+            sender: sms.sender ?? 'Unknown',
+            body: sms.body ?? '',
+            date: sms.date ?? DateTime.now(),
+            isSpam: classification.isSpam,
+            confidence: classification.confidence,
+          );
+          processed.add(processedSms);
 
-        processed.add(processedSms);
-
-        // Trigger notification if spam and alerts enabled
-        if (processedSms.isSpam) {
-          final alertsEnabled = await SettingsManager.getBool(SettingsManager.keySpamAlerts);
-          if (alertsEnabled) {
-            NotificationService.showSpamAlert(sender: sender, body: body);
+          if (processedSms.isSpam) {
+            final alertsEnabled = await SettingsManager.getBool(SettingsManager.keySpamAlerts);
+            if (alertsEnabled) {
+              NotificationService.showSpamAlert(
+                sender: processedSms.sender,
+                body: processedSms.body,
+              );
+            }
           }
         }
       }
@@ -135,54 +135,65 @@ class SmsService {
     }
   }
 
-  // ─── Heuristic Spam Classifier ─────────────────────────────────
-  static Future<SmsClassification> _classify(
-    String body,
-    String sender,
+  // ─── Softmax helper ─────────────────────────────────────────────
+  static double _softmaxSpam(double hamLogit, double spamLogit) {
+    final maxLogit = hamLogit > spamLogit ? hamLogit : spamLogit;
+    final expHam = exp(hamLogit - maxLogit);
+    final expSpam = exp(spamLogit - maxLogit);
+    return expSpam / (expHam + expSpam);
+  }
+
+  // ─── Batch classifier ──────────────────────────────────────────
+  static Future<List<SmsClassification>> _classifyBatch(
+    List<String> texts,
     HfTokenizer tokenizer,
     OrtSession session,
   ) async {
-    final tokenizedText = tokenizer.encode(
-      body,
+    final encodings = await tokenizer.encodeBatchAsync(
+      texts,
       addSpecialTokens: true,
     );
 
-    if (_kDebug) print("\t\tTokenized Text: ${tokenizedText.ids}\n");
+    int maxLen = 0;
+    for (final e in encodings) {
+      if (e.ids.length > maxLen) maxLen = e.ids.length;
+    }
 
-    final inputIds = Int64List.fromList(tokenizedText.ids);
-    final attentionMask = Int64List.fromList(tokenizedText.attentionMask);
-    final seqLen = tokenizedText.ids.length;
+    final allIds = <int>[];
+    final allMasks = <int>[];
+    for (final e in encodings) {
+      final pad = maxLen - e.ids.length;
+      allIds.addAll(e.ids);
+      allIds.addAll(List.filled(pad, 50283)); // pad_token_id
+      allMasks.addAll(e.attentionMask);
+      allMasks.addAll(List.filled(pad, 0));
+    }
 
+    final batchSize = texts.length;
     final inputs = {
-      'input_ids': await OrtValue.fromList(inputIds, [1, seqLen]),
-      'attention_mask': await OrtValue.fromList(attentionMask, [1, seqLen]),
+      'input_ids': await OrtValue.fromList(
+          Int64List.fromList(allIds), [batchSize, maxLen]),
+      'attention_mask': await OrtValue.fromList(
+          Int64List.fromList(allMasks), [batchSize, maxLen]),
     };
 
     final outputs = await session.run(inputs);
+    final raw = await outputs['logits']!.asList();
+    final pairs = (raw as List).cast<List<dynamic>>();
 
-    final finalScore = await outputs['logits']!.asList();
-    final logits = (finalScore[0] as List).cast<double>();
-    if (_kDebug) print('\t\tLogits: ${logits}');
-
-    // Apply softmax
-    final hamLogit = logits[0];
-    final spamLogit = logits[1];
-
-    final maxLogit = hamLogit > spamLogit
-        ? hamLogit
-        : spamLogit;
-    final expHam = exp(hamLogit - maxLogit);
-    final expSpam = exp(spamLogit - maxLogit);
-    final sumExp = expHam + expSpam;
-
-    final spamScore = expSpam / sumExp;
-    if (_kDebug) print('SPAM: ${(spamScore * 100).toStringAsFixed(1)}%');
-
-    final confidence = spamScore.clamp(0.0, 1.0);
-    return SmsClassification(
-      isSpam: confidence >= 0.35,
-      confidence: confidence >= 0.35 ? confidence : (1.0 - confidence),
-    );
+    final results = <SmsClassification>[];
+    for (final pair in pairs) {
+      final logits = (pair as List).cast<double>();
+      if (_kDebug) print('\t\tLogits: ${logits}');
+      final spamScore = _softmaxSpam(logits[0], logits[1]);
+      if (_kDebug) print('SPAM: ${(spamScore * 100).toStringAsFixed(1)}%');
+      final confidence = spamScore.clamp(0.0, 1.0);
+      results.add(SmsClassification(
+        isSpam: confidence >= 0.35,
+        confidence: confidence >= 0.35 ? confidence : (1.0 - confidence),
+      ));
+    }
+    return results;
   }
 
   // ─── Aggregate stats ───────────────────────────────────────────
