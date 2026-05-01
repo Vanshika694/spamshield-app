@@ -67,7 +67,15 @@ class SmsService {
       tokenizer = await HfTokenizer.fromAsset(tokenizerPath);
       final ort = OnnxRuntime();
       session = await ort.createSessionFromAsset(modelPath);
-      print("!! Tokenizer & Model Session Initialized\n");
+      print("!! Tokenizer Initialized\n");
+    } catch (e) {
+      print("Tokenizer Missing $e\n");
+    }
+
+    try {
+      final ort = OnnxRuntime();
+      session = await ort.createSessionFromAsset(modelPath);
+      print("Model Session Initialized\n");
     } catch (e) {
       print("!! Model missing or invalid (size 134 bytes). Proceeding with fallback logic. Error: $e\n");
     }
@@ -85,13 +93,13 @@ class SmsService {
           final body = sms.body ?? '';
           final sender = sms.sender ?? 'Unknown';
           final date = sms.date ?? DateTime.now();
-          print("\tProccessing Messages:\n\t\t$body\n");
+          // print("\tProccessing Messages:\n\t\t$body\n");
 
           final classification = await _classify(
             body,
             sender,
-            tokenizer,
-            session,
+            tokenizer!,
+            session!,
           );
 
           final processedSms = ProcessedSms(
@@ -127,16 +135,16 @@ class SmsService {
   static Future<SmsClassification> _classify(
     String body,
     String sender,
-    HfTokenizer? tokenizer,
-    OrtSession? session,
+    HfTokenizer tokenizer,
+    OrtSession session,
   ) async {
     final text = body.toLowerCase();
     
-    if (tokenizer == null || session == null) {
-      // Fallback dummy logic if model is not present yet
-      bool isDummySpam = text.contains("offer") || text.contains("free") || text.contains("win");
-      return SmsClassification(isSpam: isDummySpam, confidence: isDummySpam ? 0.85 : 0.95);
-    }
+    // if (tokenizer == null || session == null) {
+    //   // Fallback dummy logic if model is not present yet
+    //   bool isDummySpam = text.contains("offer") || text.contains("free") || text.contains("win");
+    //   return SmsClassification(isSpam: isDummySpam, confidence: isDummySpam ? 0.85 : 0.95);
+    // }
 
 
     final tokenizedText = tokenizer.encode(

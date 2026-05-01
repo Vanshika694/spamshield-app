@@ -32,3 +32,4 @@ flutter:
   assets:
     - assets/model/tokenizer.json
     - assets/model/model.onnx
+    - assets/model/ort_config.json
