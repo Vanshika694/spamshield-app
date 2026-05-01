@@ -31,7 +31,12 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
 
   void _onNewSms(ProcessedSms sms) {
     if (!mounted) return;
-    _all = [sms, ..._all];
+    final idx = _all.indexWhere((m) => m.sender == sms.sender && m.body == sms.body);
+    if (idx >= 0) {
+      _all[idx] = sms;
+    } else {
+      _all = [sms, ..._all];
+    }
     _applyFilter();
   }
 
@@ -385,6 +390,9 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
                       label: 'not spam',
                       confidence: sms.confidence,
                     );
+                    if (success) {
+                      SmsService.correctClassification(sms.sender, sms.body, false);
+                    }
                     if (mounted) {
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -412,6 +420,9 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
                       label: 'spam',
                       confidence: sms.confidence,
                     );
+                    if (success) {
+                      SmsService.correctClassification(sms.sender, sms.body, true);
+                    }
                     if (mounted) {
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(

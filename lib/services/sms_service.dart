@@ -112,6 +112,25 @@ class SmsService {
     _newSmsController.add(sms);
   }
 
+  static void correctClassification(String sender, String body, bool isSpam) {
+    if (_cachedMessages == null) return;
+    for (int i = 0; i < _cachedMessages!.length; i++) {
+      final m = _cachedMessages![i];
+      if (m.sender == sender && m.body == body) {
+        final corrected = ProcessedSms(
+          sender: m.sender,
+          body: m.body,
+          date: m.date,
+          isSpam: isSpam,
+          confidence: isSpam ? 1.0 : 0.0,
+        );
+        _cachedMessages![i] = corrected;
+        _newSmsController.add(corrected);
+        break;
+      }
+    }
+  }
+
   /// Clear app-only history (does not touch phone SMS)
   static void clearCache() {
     _cachedMessages = null;

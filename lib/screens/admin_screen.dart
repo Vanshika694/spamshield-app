@@ -30,7 +30,12 @@ class _AdminScreenState extends State<AdminScreen> {
   void _onNewSms(ProcessedSms sms) {
     if (!mounted) return;
     setState(() {
-      _messages = [sms, ..._messages];
+      final idx = _messages.indexWhere((m) => m.sender == sms.sender && m.body == sms.body);
+      if (idx >= 0) {
+        _messages[idx] = sms;
+      } else {
+        _messages = [sms, ..._messages];
+      }
       _stats = SmsService.getStats(_messages);
       if (sms.isSpam) {
         _flagged = [sms, ..._flagged].take(4).toList();
