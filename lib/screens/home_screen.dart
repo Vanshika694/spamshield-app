@@ -79,9 +79,12 @@ class _DashboardTabState extends State<_DashboardTab>
   List<ProcessedSms> _messages = [];
   bool _isLoading = true;
   Map<String, int> _stats = {'total': 0, 'spam': 0, 'ham': 0};
+  int _processed = 0;
+  int _total = 0;
 
   Timer? _syncTimer;
   StreamSubscription<ProcessedSms>? _newSmsSub;
+  StreamSubscription<(int, int)>? _progressSub;
 
   @override
   void initState() {
@@ -90,6 +93,9 @@ class _DashboardTabState extends State<_DashboardTab>
       ..repeat(reverse: true);
     _loadData();
     _newSmsSub = SmsService.onNewSms.listen(_onNewSms);
+    _progressSub = SmsService.onProgress.listen((p) {
+      if (mounted) setState(() { _processed = p.$1; _total = p.$2; });
+    });
   }
 
   void _onNewSms(ProcessedSms sms) {
@@ -125,6 +131,7 @@ class _DashboardTabState extends State<_DashboardTab>
   void dispose() { 
     _syncTimer?.cancel();
     _newSmsSub?.cancel();
+    _progressSub?.cancel();
     _pulseCtrl.dispose(); 
     super.dispose(); 
   }
@@ -139,7 +146,31 @@ class _DashboardTabState extends State<_DashboardTab>
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
             sliver: _isLoading 
-              ? const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
+              ? SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2.5),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: 180,
+                          child: LinearProgressIndicator(
+                            value: _total > 0 ? _processed / _total : null,
+                            color: AppTheme.accent,
+                            backgroundColor: AppTheme.accent.withValues(alpha: 0.15),
+                            minHeight: 4,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _total > 0 ? 'Classifying $_processed/$_total messages...' : 'Preparing...',
+                          style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : SliverList(
                   delegate: SliverChildListDelegate([
                     const SizedBox(height: 8),

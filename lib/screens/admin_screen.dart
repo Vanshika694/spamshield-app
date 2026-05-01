@@ -17,13 +17,19 @@ class _AdminScreenState extends State<AdminScreen> {
   List<ProcessedSms> _flagged = [];
   List<ProcessedSms> _messages = [];
   bool _isLoading = true;
+  int _processed = 0;
+  int _total = 0;
   StreamSubscription<ProcessedSms>? _newSmsSub;
+  StreamSubscription<(int, int)>? _progressSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
     _newSmsSub = SmsService.onNewSms.listen(_onNewSms);
+    _progressSub = SmsService.onProgress.listen((p) {
+      if (mounted) setState(() { _processed = p.$1; _total = p.$2; });
+    });
   }
 
   void _onNewSms(ProcessedSms sms) {
@@ -62,6 +68,7 @@ class _AdminScreenState extends State<AdminScreen> {
   @override
   void dispose() {
     _newSmsSub?.cancel();
+    _progressSub?.cancel();
     super.dispose();
   }
 
@@ -76,7 +83,29 @@ class _AdminScreenState extends State<AdminScreen> {
             const Icon(Icons.admin_panel_settings, color: AppTheme.accent),
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
+        ? Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2.5),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: 180,
+                  child: LinearProgressIndicator(
+                    value: _total > 0 ? _processed / _total : null,
+                    color: AppTheme.accent,
+                    backgroundColor: AppTheme.accent.withValues(alpha: 0.15),
+                    minHeight: 4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _total > 0 ? 'Classifying $_processed/$_total messages...' : 'Preparing...',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
+                ),
+              ],
+            ),
+          )
         : SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(

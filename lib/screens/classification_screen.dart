@@ -19,14 +19,20 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
   bool _noPerm    = false;
   String _filter  = 'All';
   String _query   = '';
+  int _processed = 0;
+  int _total = 0;
   final _searchCtrl = TextEditingController();
   StreamSubscription<ProcessedSms>? _newSmsSub;
+  StreamSubscription<(int, int)>? _progressSub;
 
   @override
   void initState() {
     super.initState();
     _loadSms();
     _newSmsSub = SmsService.onNewSms.listen(_onNewSms);
+    _progressSub = SmsService.onProgress.listen((p) {
+      if (mounted) setState(() { _processed = p.$1; _total = p.$2; });
+    });
   }
 
   void _onNewSms(ProcessedSms sms) {
@@ -43,6 +49,7 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
   @override
   void dispose() {
     _newSmsSub?.cancel();
+    _progressSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -162,8 +169,21 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2.5),
-            const SizedBox(height: 16),
-            Text('Reading your messages...', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: 180,
+              child: LinearProgressIndicator(
+                value: _total > 0 ? _processed / _total : null,
+                color: AppTheme.accent,
+                backgroundColor: AppTheme.accent.withValues(alpha: 0.15),
+                minHeight: 4,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _total > 0 ? 'Classifying $_processed/$_total messages...' : 'Reading your messages...',
+              style: GoogleFonts.inter(color: AppTheme.textSecondary),
+            ),
           ],
         ),
       );

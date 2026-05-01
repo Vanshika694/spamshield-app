@@ -5,7 +5,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
 import 'package:flutter_embedder/flutter_embedder.dart';
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
-import 'notification_service.dart';
 import 'settings_manager.dart';
 import 'dart:math';
 
@@ -51,6 +50,9 @@ class SmsService {
   static OrtSession? _session;
   static List<ProcessedSms>? _cachedMessages;
   static Future<List<ProcessedSms>>? _loadingFuture;
+  static final _progressController = StreamController<(int, int)>.broadcast();
+  static Stream<(int, int)> get onProgress => _progressController.stream;
+
   static final _newSmsController = StreamController<ProcessedSms>.broadcast();
   static Stream<ProcessedSms> get onNewSms => _newSmsController.stream;
 
@@ -161,17 +163,21 @@ class SmsService {
     try {
       final messages = await _query.querySms(
         kinds: [SmsQueryKind.inbox],
-        count: 50, // limit to 500 most recent
+        count: 500,
       );
 
-      print("Got all Messages, classifying in batches...\n");
-      const batchSize = 32;
+      if (messages.isEmpty) return [];
+
+      final total = messages.length;
+      _progressController.add((0, total));
+
+      print("Classifying in small batches...\n");
+      const batchSize = 4;
       final processed = <ProcessedSms>[];
       for (int i = 0; i < messages.length; i += batchSize) {
         final end = min(i + batchSize, messages.length);
         final batch = messages.sublist(i, end);
         final texts = batch.map((s) => s.body ?? '').toList();
-
         if (_kDebug)
           print(
             "Batch ${i ~/ batchSize + 1}/${(messages.length / batchSize).ceil()}: ${texts.length} messages",
@@ -186,29 +192,20 @@ class SmsService {
         for (int j = 0; j < batch.length; j++) {
           final sms = batch[j];
           final classification = classifications[j];
-          final processedSms = ProcessedSms(
+          processed.add(ProcessedSms(
             sender: sms.sender ?? 'Unknown',
             body: sms.body ?? '',
             date: sms.date ?? DateTime.now(),
             isSpam: classification.isSpam,
             confidence: classification.confidence,
-          );
-          processed.add(processedSms);
-
-          if (processedSms.isSpam) {
-            final alertsEnabled = await SettingsManager.getBool(
-              SettingsManager.keySpamAlerts,
-            );
-            if (alertsEnabled) {
-              NotificationService.showSpamAlert(
-                sender: processedSms.sender,
-                body: processedSms.body,
-              );
-            }
-          }
+          ));
         }
+
+        _progressController.add((processed.length, total));
+        await Future.delayed(const Duration(milliseconds: 15));
       }
 
+      _progressController.add((total, total));
       return processed;
     } catch (e, stackTrace) {
       print('❌ Error: $e');
