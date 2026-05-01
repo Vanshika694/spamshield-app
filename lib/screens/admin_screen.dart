@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
@@ -16,11 +18,24 @@ class _AdminScreenState extends State<AdminScreen> {
   List<ProcessedSms> _flagged = [];
   List<ProcessedSms> _messages = [];
   bool _isLoading = true;
+  StreamSubscription<ProcessedSms>? _newSmsSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _newSmsSub = SmsService.onNewSms.listen(_onNewSms);
+  }
+
+  void _onNewSms(ProcessedSms sms) {
+    if (!mounted) return;
+    setState(() {
+      _messages = [sms, ..._messages];
+      _stats = SmsService.getStats(_messages);
+      if (sms.isSpam) {
+        _flagged = [sms, ..._flagged].take(4).toList();
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -38,6 +53,12 @@ class _AdminScreenState extends State<AdminScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _newSmsSub?.cancel();
+    super.dispose();
   }
 
   @override

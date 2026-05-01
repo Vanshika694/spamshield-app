@@ -20,6 +20,11 @@ class SmsListener {
     print("New SMS!!");
     if (message.body == null || message.body!.isEmpty) return;
     final classification = await SmsService.classifyText(message.body!);
+    SmsService.addNewSms( 
+      message.address ?? 'Unknown',
+      message.body!,
+      classification,
+    );
     print("Message: ${message.body} | Output:${classification.isSpam}");
     if (classification.isSpam) {
       await NotificationService.showSpamAlert(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:permission_handler/permission_handler.dart';
@@ -50,6 +51,8 @@ class SmsService {
   static OrtSession? _session;
   static List<ProcessedSms>? _cachedMessages;
   static Future<List<ProcessedSms>>? _loadingFuture;
+  static final _newSmsController = StreamController<ProcessedSms>.broadcast();
+  static Stream<ProcessedSms> get onNewSms => _newSmsController.stream;
 
   static Future<void> initModel() async {
     if (_tokenizer != null && _session != null) return;
@@ -93,6 +96,20 @@ class SmsService {
       isSpam: confidence >= 0.35,
       confidence: confidence >= 0.35 ? confidence : (1.0 - confidence),
     );
+  }
+
+  static void addNewSms(String sender, String body, SmsClassification classification) {
+    final sms = ProcessedSms(
+      sender: sender,
+      body: body,
+      date: DateTime.now(),
+      isSpam: classification.isSpam,
+      confidence: classification.confidence,
+    );
+    if (_cachedMessages != null) {
+      _cachedMessages = [sms, ..._cachedMessages!];
+    }
+    _newSmsController.add(sms);
   }
 
   /// Clear app-only history (does not touch phone SMS)

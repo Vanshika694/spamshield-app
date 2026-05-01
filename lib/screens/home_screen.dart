@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -10,8 +12,6 @@ import 'admin_screen.dart';
 import 'settings_screen.dart';
 import '../services/settings_manager.dart';
 import '../services/notification_service.dart';
-import 'dart:async';
-import 'dart:math';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -82,6 +82,7 @@ class _DashboardTabState extends State<_DashboardTab>
   Map<String, int> _stats = {'total': 0, 'spam': 0, 'ham': 0};
 
   Timer? _syncTimer;
+  StreamSubscription<ProcessedSms>? _newSmsSub;
 
   @override
   void initState() {
@@ -90,6 +91,15 @@ class _DashboardTabState extends State<_DashboardTab>
       ..repeat(reverse: true);
     _loadData();
     _startSyncTimer();
+    _newSmsSub = SmsService.onNewSms.listen(_onNewSms);
+  }
+
+  void _onNewSms(ProcessedSms sms) {
+    if (!mounted) return;
+    setState(() {
+      _messages = [sms, ..._messages];
+      _stats = SmsService.getStats(_messages);
+    });
   }
 
   void _startSyncTimer() {
@@ -128,6 +138,7 @@ class _DashboardTabState extends State<_DashboardTab>
   @override
   void dispose() { 
     _syncTimer?.cancel();
+    _newSmsSub?.cancel();
     _pulseCtrl.dispose(); 
     super.dispose(); 
   }

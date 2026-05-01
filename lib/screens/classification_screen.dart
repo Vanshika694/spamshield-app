@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
@@ -19,15 +20,24 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
   String _filter  = 'All';
   String _query   = '';
   final _searchCtrl = TextEditingController();
+  StreamSubscription<ProcessedSms>? _newSmsSub;
 
   @override
   void initState() {
     super.initState();
     _loadSms();
+    _newSmsSub = SmsService.onNewSms.listen(_onNewSms);
+  }
+
+  void _onNewSms(ProcessedSms sms) {
+    if (!mounted) return;
+    _all = [sms, ..._all];
+    _applyFilter();
   }
 
   @override
   void dispose() {
+    _newSmsSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }

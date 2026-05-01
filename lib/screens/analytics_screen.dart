@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -18,13 +20,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   List<ProcessedSms> _messages = [];
   Map<String, int> _stats = {'total': 0, 'spam': 0, 'ham': 0};
   bool _isLoading = true;
+  StreamSubscription<ProcessedSms>? _newSmsSub;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadData();
+    _newSmsSub = SmsService.onNewSms.listen(_onNewSms);
   }
+
+  void _onNewSms(ProcessedSms sms) {
+    if (!mounted) return;
+    setState(() {
+      _messages = [sms, ..._messages];
+      _stats = SmsService.getStats(_messages);
+    });
+  }
+
+  // ...
 
   Future<void> _loadData() async {
     final msgs = await SmsService.getAllSms();
@@ -40,6 +54,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   @override
   void dispose() {
+    _newSmsSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
