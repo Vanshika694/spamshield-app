@@ -43,6 +43,7 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
     } else {
       _all = [sms, ..._all];
     }
+    _all.sort((a, b) => b.date.compareTo(a.date));
     _applyFilter();
   }
 

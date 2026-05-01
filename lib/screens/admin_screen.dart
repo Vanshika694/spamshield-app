@@ -41,6 +41,7 @@ class _AdminScreenState extends State<AdminScreen> {
       } else {
         _messages = [sms, ..._messages];
       }
+      _messages.sort((a, b) => b.date.compareTo(a.date));
       _stats = SmsService.getStats(_messages);
       if (sms.isSpam) {
         _flagged = [sms, ..._flagged].take(4).toList();

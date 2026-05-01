@@ -172,7 +172,7 @@ class SmsService {
       _progressController.add((0, total));
 
       print("Classifying in small batches...\n");
-      const batchSize = 4;
+      const batchSize = 2;
       final processed = <ProcessedSms>[];
       for (int i = 0; i < messages.length; i += batchSize) {
         final end = min(i + batchSize, messages.length);
@@ -204,7 +204,7 @@ class SmsService {
         }
 
         _progressController.add((processed.length, total));
-        await Future.delayed(const Duration(milliseconds: 1));
+        await Future.delayed(const Duration(milliseconds: 150));
       }
 
       _progressController.add((total, total));

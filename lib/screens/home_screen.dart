@@ -141,6 +141,7 @@ class _DashboardTabState extends State<_DashboardTab>
       } else {
         _messages = [sms, ..._messages];
       }
+      _messages.sort((a, b) => b.date.compareTo(a.date));
       _stats = SmsService.getStats(_messages);
     });
   }
