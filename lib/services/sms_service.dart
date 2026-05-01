@@ -192,17 +192,19 @@ class SmsService {
         for (int j = 0; j < batch.length; j++) {
           final sms = batch[j];
           final classification = classifications[j];
-          processed.add(ProcessedSms(
+          final processedSms = ProcessedSms(
             sender: sms.sender ?? 'Unknown',
             body: sms.body ?? '',
             date: sms.date ?? DateTime.now(),
             isSpam: classification.isSpam,
             confidence: classification.confidence,
-          ));
+          );
+          processed.add(processedSms);
+          _newSmsController.add(processedSms);
         }
 
         _progressController.add((processed.length, total));
-        await Future.delayed(const Duration(milliseconds: 15));
+        await Future.delayed(const Duration(milliseconds: 1));
       }
 
       _progressController.add((total, total));

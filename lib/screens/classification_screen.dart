@@ -163,28 +163,11 @@ class _ClassificationScreenState extends State<ClassificationScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
+    if (_loading && _all.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2.5),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: 180,
-              child: LinearProgressIndicator(
-                value: _total > 0 ? _processed / _total : null,
-                color: AppTheme.accent,
-                backgroundColor: AppTheme.accent.withValues(alpha: 0.15),
-                minHeight: 4,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              _total > 0 ? 'Classifying $_processed/$_total messages...' : 'Reading your messages...',
-              style: GoogleFonts.inter(color: AppTheme.textSecondary),
-            ),
-          ],
+        child: Text(
+          'Reading your messages...',
+          style: GoogleFonts.inter(color: AppTheme.textSecondary),
         ),
       );
     }

@@ -82,28 +82,11 @@ class _AdminScreenState extends State<AdminScreen> {
         leading:
             const Icon(Icons.admin_panel_settings, color: AppTheme.accent),
       ),
-      body: _isLoading 
+      body: _isLoading && _messages.isEmpty
         ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2.5),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: 180,
-                  child: LinearProgressIndicator(
-                    value: _total > 0 ? _processed / _total : null,
-                    color: AppTheme.accent,
-                    backgroundColor: AppTheme.accent.withValues(alpha: 0.15),
-                    minHeight: 4,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  _total > 0 ? 'Classifying $_processed/$_total messages...' : 'Preparing...',
-                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
-                ),
-              ],
+            child: Text(
+              'Preparing...',
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
             ),
           )
         : SingleChildScrollView(

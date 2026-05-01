@@ -33,7 +33,41 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _screens),
+      body: Column(
+        children: [
+          Expanded(
+            child: IndexedStack(index: _currentIndex, children: _screens),
+          ),
+          StreamBuilder<(int, int)>(
+            stream: SmsService.onProgress,
+            initialData: (0, 0),
+            builder: (context, snapshot) {
+              final p = snapshot.data ?? (0, 0);
+              if (p.$1 >= p.$2 || p.$2 == 0) return const SizedBox.shrink();
+              return Container(
+                color: AppTheme.surface,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LinearProgressIndicator(
+                      value: p.$1 / p.$2,
+                      color: AppTheme.accent,
+                      backgroundColor: AppTheme.accent.withValues(alpha: 0.15),
+                      minHeight: 3,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Classifying ${p.$1}/${p.$2} messages...',
+                      style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.surface,
@@ -145,46 +179,20 @@ class _DashboardTabState extends State<_DashboardTab>
           _buildSliverHeader(),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-            sliver: _isLoading 
-              ? SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2.5),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: 180,
-                          child: LinearProgressIndicator(
-                            value: _total > 0 ? _processed / _total : null,
-                            color: AppTheme.accent,
-                            backgroundColor: AppTheme.accent.withValues(alpha: 0.15),
-                            minHeight: 4,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          _total > 0 ? 'Classifying $_processed/$_total messages...' : 'Preparing...',
-                          style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : SliverList(
-                  delegate: SliverChildListDelegate([
-                    const SizedBox(height: 8),
-                    _buildSecurityStatusCard(),
-                    const SizedBox(height: 20),
-                    _buildStatsRow(),
-                    const SizedBox(height: 20),
-                    _buildChartCard(),
-                    const SizedBox(height: 20),
-                    _buildWeeklyTrendCard(),
-                    const SizedBox(height: 20),
-                    _buildRecentMessages(),
-                  ]),
-                ),
+            sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  const SizedBox(height: 8),
+                  _buildSecurityStatusCard(),
+                  const SizedBox(height: 20),
+                  _buildStatsRow(),
+                  const SizedBox(height: 20),
+                  _buildChartCard(),
+                  const SizedBox(height: 20),
+                  _buildWeeklyTrendCard(),
+                  const SizedBox(height: 20),
+                  _buildRecentMessages(),
+                ]),
+              ),
           ),
         ],
       ),
