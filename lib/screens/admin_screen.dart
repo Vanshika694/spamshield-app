@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/sms_service.dart';
-import 'dart:math';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});

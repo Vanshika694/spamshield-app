@@ -10,8 +10,7 @@ import 'classification_screen.dart';
 import 'analytics_screen.dart';
 import 'admin_screen.dart';
 import 'settings_screen.dart';
-import '../services/settings_manager.dart';
-import '../services/notification_service.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -90,7 +89,6 @@ class _DashboardTabState extends State<_DashboardTab>
     _pulseCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 3))
       ..repeat(reverse: true);
     _loadData();
-    _startSyncTimer();
     _newSmsSub = SmsService.onNewSms.listen(_onNewSms);
   }
 
@@ -107,23 +105,6 @@ class _DashboardTabState extends State<_DashboardTab>
     });
   }
 
-  void _startSyncTimer() {
-    _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
-      final autoScan = await SettingsManager.getBool(SettingsManager.keyAutoScan);
-      if (autoScan) {
-        await _loadData();
-        
-        final realTime = await SettingsManager.getBool(SettingsManager.keyRealTime);
-        if (realTime) {
-          NotificationService.showSpamAlert(
-            sender: "System",
-            body: "Real-time scan completed: ${_stats['spam']} threats currently tracked."
-          );
-        }
-      }
-    });
-  }
 
   Future<void> _loadData() async {
     final user = await AuthService.getUser();

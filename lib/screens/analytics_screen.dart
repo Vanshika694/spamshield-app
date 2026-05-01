@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../theme/app_theme.dart';
 import '../services/sms_service.dart';
-import 'dart:math';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
