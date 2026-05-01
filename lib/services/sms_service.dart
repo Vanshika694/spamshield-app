@@ -33,6 +33,7 @@ class ProcessedSms {
 }
 
 class SmsService {
+  static const _kDebug = false;
   static final SmsQuery _query = SmsQuery();
 
   // ─── Permission: triggers real Android system popup ────────────
@@ -76,6 +77,8 @@ class SmsService {
       final ort = OnnxRuntime();
       session = await ort.createSessionFromAsset(modelPath);
       print("Model Session Initialized\n");
+      print('Model Inputs:  ${session.inputNames}');
+      print('Model Outputs: ${session.outputNames}');
     } catch (e) {
       print("!! Model missing or invalid (size 134 bytes). Proceeding with fallback logic. Error: $e\n");
     }
@@ -87,40 +90,41 @@ class SmsService {
         count: 500, // limit to 500 most recent
       );
 
-      print("Got all Messages\n");
-      final processed = await Future.wait(
-        messages.map((sms) async {
-          final body = sms.body ?? '';
-          final sender = sms.sender ?? 'Unknown';
-          final date = sms.date ?? DateTime.now();
-          // print("\tProccessing Messages:\n\t\t$body\n");
+      print("Got all Messages, classifying sequentially...\n");
+      final processed = <ProcessedSms>[];
+      for (int i = 0; i < messages.length; i++) {
+        final sms = messages[i];
+        final body = sms.body ?? '';
+        final sender = sms.sender ?? 'Unknown';
+        final date = sms.date ?? DateTime.now();
 
-          final classification = await _classify(
-            body,
-            sender,
-            tokenizer!,
-            session!,
-          );
+        if (_kDebug) print("[${i + 1}/${messages.length}] ${sender}: $body");
 
-          final processedSms = ProcessedSms(
-            sender: sender,
-            body: body,
-            date: date,
-            isSpam: classification.isSpam,
-            confidence: classification.confidence,
-          );
+        final classification = await _classify(
+          body,
+          sender,
+          tokenizer!,
+          session!,
+        );
 
-          // Trigger notification if spam and alerts enabled
-          if (processedSms.isSpam) {
-            final alertsEnabled = await SettingsManager.getBool(SettingsManager.keySpamAlerts);
-            if (alertsEnabled) {
-              NotificationService.showSpamAlert(sender: sender, body: body);
-            }
+        final processedSms = ProcessedSms(
+          sender: sender,
+          body: body,
+          date: date,
+          isSpam: classification.isSpam,
+          confidence: classification.confidence,
+        );
+
+        processed.add(processedSms);
+
+        // Trigger notification if spam and alerts enabled
+        if (processedSms.isSpam) {
+          final alertsEnabled = await SettingsManager.getBool(SettingsManager.keySpamAlerts);
+          if (alertsEnabled) {
+            NotificationService.showSpamAlert(sender: sender, body: body);
           }
-
-          return processedSms;
-        }),
-      );
+        }
+      }
 
       _cachedMessages = processed;
       return processed;
@@ -138,26 +142,12 @@ class SmsService {
     HfTokenizer tokenizer,
     OrtSession session,
   ) async {
-    final text = body.toLowerCase();
-    
-    // if (tokenizer == null || session == null) {
-    //   // Fallback dummy logic if model is not present yet
-    //   bool isDummySpam = text.contains("offer") || text.contains("free") || text.contains("win");
-    //   return SmsClassification(isSpam: isDummySpam, confidence: isDummySpam ? 0.85 : 0.95);
-    // }
-
-
     final tokenizedText = tokenizer.encode(
       body,
       addSpecialTokens: true,
     );
 
-    final tokens = tokenizedText.ids;
-    print("\t\tTokenized Text: $tokens\n");
-    print("\t\tRunning Model ... for above text\n");
-
-    print('Inputs:  ${session.inputNames}');
-    print('Outputs: ${session.outputNames}');
+    if (_kDebug) print("\t\tTokenized Text: ${tokenizedText.ids}\n");
 
     final inputIds = Int64List.fromList(tokenizedText.ids);
     final attentionMask = Int64List.fromList(tokenizedText.attentionMask);
@@ -171,11 +161,8 @@ class SmsService {
     final outputs = await session.run(inputs);
 
     final finalScore = await outputs['logits']!.asList();
-    // Softmax ------------------------
-    // logits is [[ham_score, spam_score]] — flatten it
     final logits = (finalScore[0] as List).cast<double>();
-    print('\t\tLogits: ${logits}');
-    // logits = [3.458, -3.014]
+    if (_kDebug) print('\t\tLogits: ${logits}');
 
     // Apply softmax
     final hamLogit = logits[0];
@@ -183,19 +170,13 @@ class SmsService {
 
     final maxLogit = hamLogit > spamLogit
         ? hamLogit
-        : spamLogit; // for numerical stability
+        : spamLogit;
     final expHam = exp(hamLogit - maxLogit);
     final expSpam = exp(spamLogit - maxLogit);
     final sumExp = expHam + expSpam;
 
-    final hamProb = expHam / sumExp;
     final spamScore = expSpam / sumExp;
-
-    // print('HAM:  ${(hamProb * 100).toStringAsFixed(1)}%');
-    print('SPAM: ${(spamScore * 100).toStringAsFixed(1)}%');
-
-    // final double spamScore = spamProb;
-    // --------------------------------
+    if (_kDebug) print('SPAM: ${(spamScore * 100).toStringAsFixed(1)}%');
 
     final confidence = spamScore.clamp(0.0, 1.0);
     return SmsClassification(
