@@ -47,16 +47,30 @@ class SmsService {
   static Future<void> openSettings() async => await openAppSettings();
 
   static List<ProcessedSms>? _cachedMessages;
+  static Future<List<ProcessedSms>>? _loadingFuture;
 
   /// Clear app-only history (does not touch phone SMS)
   static void clearCache() {
     _cachedMessages = null;
+    _loadingFuture = null;
   }
 
   // ─── READ ALL SMS from device inbox ───────────────────────────
   static Future<List<ProcessedSms>> getAllSms({bool forceRefresh = false}) async {
     if (_cachedMessages != null && !forceRefresh) return _cachedMessages!;
+    if (_loadingFuture != null && !forceRefresh) return _loadingFuture!;
 
+    _loadingFuture = _doGetAllSms();
+    try {
+      final result = await _loadingFuture!;
+      _cachedMessages = result;
+      return result;
+    } finally {
+      _loadingFuture = null;
+    }
+  }
+
+  static Future<List<ProcessedSms>> _doGetAllSms() async {
     print("!! Initializing Tokenizer & Model Session...\n");
     final tokenizerPath = "assets/model/tokenizer.json";
     final modelPath = "assets/model/model.onnx";
@@ -126,7 +140,6 @@ class SmsService {
         }
       }
 
-      _cachedMessages = processed;
       return processed;
     } catch (e, stackTrace) {
       print('❌ Error: $e');
